@@ -82,3 +82,21 @@ BuildPlane will learn Kubernetes in this order:
 
 This order is deliberate. Operators make more sense after the lower-level
 objects are familiar.
+
+## Current Phase 1 Runtime
+
+Phase 1 introduces one running service:
+
+```mermaid
+flowchart LR
+  Curl["curl localhost:8080"] --> PF["kubectl port-forward"]
+  PF --> SVC["Service: buildplane-control-plane"]
+  SVC --> Pod1["Pod replica"]
+  SVC --> Pod2["Pod replica"]
+  Pod1 --> Go["Go HTTP server"]
+  Pod2 --> Go
+```
+
+The service is intentionally small. It proves the path from Go source code to
+container image to Kubernetes Deployment and Service before adding PostgreSQL,
+Redis, CRDs, or workers.
