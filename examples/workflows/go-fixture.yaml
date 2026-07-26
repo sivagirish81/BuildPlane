@@ -1,0 +1,17 @@
+tenant_id: tenant-a
+name: go-fixture-ci
+jobs:
+  - name: test
+    commands:
+      - go test ./...
+      - echo "BuildPlane fixture completed"
+    requested_cpu_millis: 500
+    requested_memory_mb: 512
+    cache:
+      paths:
+        - .cache
+      key_files:
+        - go.sum
+      key_prefix: go-build
+    max_attempts: 3
+    active_deadline_seconds: 600

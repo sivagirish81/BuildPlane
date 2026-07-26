@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: buildplane:local
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/api"]
+          envFrom:
+            - configMapRef:
+                name: buildplane-config
+            - secretRef:
+                name: buildplane-secrets
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  namespace: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scheduler
+  template:
+    metadata:
+      labels:
+        app: scheduler
+    spec:
+      serviceAccountName: buildplane-scheduler
+      containers:
+        - name: scheduler
+          image: buildplane:local
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/scheduler"]
+          envFrom:
+            - configMapRef:
+                name: buildplane-config
+            - secretRef:
+                name: buildplane-secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autoscaler
+  namespace: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autoscaler
+  template:
+    metadata:
+      labels:
+        app: autoscaler
+    spec:
+      containers:
+        - name: autoscaler
+          image: buildplane:local
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/autoscaler"]
+          env:
+            - name: HTTP_ADDR
+              value: ":8080"
+          envFrom:
+            - configMapRef:
+                name: buildplane-config
+            - secretRef:
+                name: buildplane-secrets

@@ -1,0 +1,30 @@
+{
+  "title": "BuildPlane Overview",
+  "schemaVersion": 41,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "targets": [{"expr": "buildplane_queue_depth"}],
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Active Jobs",
+      "targets": [{"expr": "buildplane_active_jobs"}],
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Lease Expirations",
+      "targets": [{"expr": "rate(buildplane_lease_expirations_total[5m])"}],
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Autoscaler Desired Capacity",
+      "targets": [{"expr": "buildplane_autoscaler_desired_capacity"}],
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
+    }
+  ]
+}
