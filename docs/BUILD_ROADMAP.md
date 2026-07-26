@@ -20,6 +20,8 @@ Learning focus:
 
 ## Phase 1: First Kubernetes Workload
 
+Status: Complete
+
 Goal: Build the smallest useful BuildPlane service and run it locally in `kind`.
 
 Planned behavior:
