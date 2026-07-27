@@ -39,6 +39,8 @@ spec:
               value: redis://buildplane-redis:6379/0
             - name: BUILDPLANE_MIGRATIONS_DIR
               value: /migrations
+            - name: BUILDPLANE_AI_SERVICE_URL
+              value: http://buildplane-ai-service:8090
           resources:
             requests:
               cpu: 25m

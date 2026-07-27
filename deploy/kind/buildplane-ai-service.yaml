@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-ai-service
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-ai-service
+    app.kubernetes.io/part-of: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-ai-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-ai-service
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ai-service
+          image: buildplane/ai-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8090
+          env:
+            - name: BUILDPLANE_AI_PROVIDER
+              value: mock
+            - name: BUILDPLANE_AI_PROMPT_VERSION
+              value: issue_classifier_v1
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-ai-service
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-ai-service
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-ai-service
+  ports:
+    - name: http
+      port: 8090
+      targetPort: http
+

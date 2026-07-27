@@ -107,6 +107,8 @@ Learning focus:
 
 ## Phase 5: Python AI Service
 
+Status: Complete
+
 Goal: Add a bounded Python FastAPI service for structured extraction or
 classification.
 

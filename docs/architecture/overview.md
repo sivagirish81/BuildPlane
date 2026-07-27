@@ -163,3 +163,20 @@ flowchart LR
 Node ordering is application-defined in Go code for now. Completion of one node
 creates the next pending node inside the same PostgreSQL transaction. If a node
 fails, retry behavior is bounded by that node's `MaxAttempts`.
+
+## Current Phase 5 Runtime
+
+Phase 5 adds a Python AI service behind a Kubernetes Service:
+
+```mermaid
+flowchart LR
+  Worker["buildplane-worker"] --> DNS["Service DNS: buildplane-ai-service"]
+  DNS --> AI["Python FastAPI AI service"]
+  AI --> Mock["Mock provider"]
+  AI -. optional .-> OpenAI["OpenAI Responses API"]
+  Worker --> PG["PostgreSQL node result + audit"]
+```
+
+The worker calls `classify_issue` through a typed HTTP client. The AI service is
+mock-backed by default, and the OpenAI provider is enabled only through
+environment configuration and credentials.

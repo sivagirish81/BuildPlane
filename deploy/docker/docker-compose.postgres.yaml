@@ -23,6 +23,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  ai-service:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/ai-service.Dockerfile
+    environment:
+      BUILDPLANE_AI_PROVIDER: mock
+      BUILDPLANE_AI_PROMPT_VERSION: issue_classifier_v1
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   buildplane-postgres-data:

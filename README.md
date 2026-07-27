@@ -167,3 +167,54 @@ validate_input -> compose_summary
 ```
 
 Each meaningful transition is also recorded in `audit_records`.
+
+## Phase 5: Python AI Service
+
+Phase 5 inserts a bounded AI classification node into the local workflow:
+
+```text
+validate_input -> classify_issue -> compose_summary
+```
+
+Create a local Python virtual environment and run the AI service tests:
+
+```bash
+python3 -m venv .cache/ai-service-venv
+.cache/ai-service-venv/bin/pip install -e 'ai-service[dev]'
+.cache/ai-service-venv/bin/python -m pytest ai-service/tests
+```
+
+Run the AI service locally with its deterministic mock provider:
+
+```bash
+.cache/ai-service-venv/bin/python -m uvicorn app.main:app --app-dir ai-service --host 0.0.0.0 --port 8090
+```
+
+In the worker terminal, point the worker at the local AI service:
+
+```bash
+export BUILDPLANE_AI_SERVICE_URL='http://localhost:8090'
+```
+
+Create a workflow run with issue context:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: phase5-demo-001' \
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001","customer_message":"Urgent invoice charge dispute needs escalation"}}'
+```
+
+Build the AI service image:
+
+```bash
+docker build -f deploy/docker/ai-service.Dockerfile -t buildplane/ai-service:dev .
+```
+
+Run it in `kind` with the worker:
+
+```bash
+kind load docker-image buildplane/ai-service:dev --name buildplane
+kubectl apply -f deploy/kind/buildplane-ai-service.yaml
+kubectl apply -f deploy/kind/buildplane-scheduler-worker.yaml
+```

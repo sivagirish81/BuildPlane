@@ -147,6 +147,7 @@ type Worker struct {
 	consumer      QueueConsumer
 	WorkerID      string
 	LeaseDuration time.Duration
+	Dependencies  NodeDependencies
 }
 
 func NewWorker(repository WorkerRepository, consumer QueueConsumer, workerID string) *Worker {
@@ -185,11 +186,12 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 		return true, err
 	}
 
-	output, maxAttempts, err := ExecuteNode(NodeInput{
-		WorkflowName: lease.WorkflowName,
-		NodeName:     lease.NodeName,
-		Input:        lease.Input,
-	})
+	output, maxAttempts, err := ExecuteNode(ctx, NodeInput{
+		WorkflowRunID: lease.WorkflowRunID,
+		WorkflowName:  lease.WorkflowName,
+		NodeName:      lease.NodeName,
+		Input:         lease.Input,
+	}, w.Dependencies)
 	if err != nil {
 		if failErr := w.repository.FailNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, err.Error(), maxAttempts); failErr != nil {
 			return true, failErr
