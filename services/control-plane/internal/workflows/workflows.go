@@ -51,13 +51,14 @@ type CreateRunRequest struct {
 }
 
 type CreateRunParams struct {
-	ID             string
-	WorkflowName   string
-	Status         Status
-	Input          json.RawMessage
-	IdempotencyKey string
-	RequestHash    string
-	CorrelationID  string
+	ID              string
+	WorkflowName    string
+	Status          Status
+	Input           json.RawMessage
+	IdempotencyKey  string
+	RequestHash     string
+	CorrelationID   string
+	InitialNodeName string
 }
 
 type Repository interface {
@@ -96,13 +97,14 @@ func (s *Service) CreateRun(ctx context.Context, req CreateRunRequest) (Run, boo
 	}
 
 	params := CreateRunParams{
-		ID:             id,
-		WorkflowName:   workflowName,
-		Status:         StatusQueued,
-		Input:          input,
-		IdempotencyKey: idempotencyKey,
-		RequestHash:    requestHash(workflowName, input),
-		CorrelationID:  strings.TrimSpace(req.CorrelationID),
+		ID:              id,
+		WorkflowName:    workflowName,
+		Status:          StatusQueued,
+		Input:           input,
+		IdempotencyKey:  idempotencyKey,
+		RequestHash:     requestHash(workflowName, input),
+		CorrelationID:   strings.TrimSpace(req.CorrelationID),
+		InitialNodeName: "phase3.bootstrap",
 	}
 
 	return s.repository.CreateRun(ctx, params)

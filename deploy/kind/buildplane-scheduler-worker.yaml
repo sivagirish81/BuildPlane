@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-scheduler
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-scheduler
+    app.kubernetes.io/part-of: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-scheduler
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: scheduler
+          image: buildplane/control-plane:dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - /buildplane-scheduler
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: buildplane-postgres
+                  key: database-url
+            - name: BUILDPLANE_REDIS_URL
+              value: redis://buildplane-redis:6379/0
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              value: /migrations
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-worker
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker
+    app.kubernetes.io/part-of: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-worker
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: buildplane/control-plane:dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - /buildplane-worker
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: buildplane-postgres
+                  key: database-url
+            - name: BUILDPLANE_REDIS_URL
+              value: redis://buildplane-redis:6379/0
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              value: /migrations
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true

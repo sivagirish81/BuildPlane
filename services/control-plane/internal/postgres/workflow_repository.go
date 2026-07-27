@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/sivagirish/buildplane/services/control-plane/internal/workflows"
 )
@@ -29,6 +31,9 @@ func (r *WorkflowRepository) CreateRun(ctx context.Context, params workflows.Cre
 
 	run, err := insertRun(ctx, tx, params)
 	if err == nil {
+		if err := insertInitialNodeExecution(ctx, tx, run.ID, params.InitialNodeName); err != nil {
+			return workflows.Run{}, false, err
+		}
 		if err := tx.Commit(); err != nil {
 			return workflows.Run{}, false, fmt.Errorf("commit create workflow run: %w", err)
 		}
@@ -99,6 +104,30 @@ RETURNING id, workflow_name, status, input, idempotency_key, request_hash, corre
 	))
 }
 
+func insertInitialNodeExecution(ctx context.Context, tx *sql.Tx, workflowRunID string, nodeName string) error {
+	if nodeName == "" {
+		nodeName = "phase3.bootstrap"
+	}
+
+	nodeID, err := newID()
+	if err != nil {
+		return fmt.Errorf("generate node execution id: %w", err)
+	}
+
+	const query = `
+INSERT INTO node_executions (
+	id,
+	workflow_run_id,
+	node_name,
+	status
+) VALUES ($1, $2, $3, $4)`
+
+	if _, err := tx.ExecContext(ctx, query, nodeID, workflowRunID, nodeName, string(workflows.NodeStatusPending)); err != nil {
+		return fmt.Errorf("insert initial node execution: %w", err)
+	}
+	return nil
+}
+
 func getRunByIdempotencyKey(ctx context.Context, tx *sql.Tx, idempotencyKey string) (workflows.Run, error) {
 	const query = `
 SELECT id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, created_at, updated_at
@@ -138,4 +167,30 @@ func scanRun(row rowScanner) (workflows.Run, error) {
 	run.Status = workflows.Status(status)
 	run.Input = json.RawMessage(inputBytes)
 	return run, nil
+}
+
+func newID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
+}
+
+func nullString(value sql.NullString) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
+}
+
+func nullTime(value sql.NullTime) time.Time {
+	if !value.Valid {
+		return time.Time{}
+	}
+	return value.Time
 }

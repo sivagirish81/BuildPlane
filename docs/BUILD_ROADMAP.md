@@ -64,6 +64,8 @@ Learning focus:
 
 ## Phase 3: Queue and Worker Loop
 
+Status: Complete
+
 Goal: Dispatch persisted node executions to workers using Redis Streams or a
 Redis-backed queue.
 

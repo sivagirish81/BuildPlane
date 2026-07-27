@@ -91,3 +91,51 @@ docker compose -f deploy/docker/docker-compose.postgres.yaml exec postgres \
   psql -U buildplane -d buildplane \
   -c 'select id, workflow_name, status, idempotency_key, created_at from workflow_runs;'
 ```
+
+## Phase 3: Queue and Worker Loop
+
+Phase 3 adds Redis Streams dispatch, a scheduler, worker leases, heartbeats, and
+idempotent completion.
+
+Start local dependencies:
+
+```bash
+docker compose -f deploy/docker/docker-compose.postgres.yaml up -d
+export BUILDPLANE_DATABASE_URL='postgres://buildplane:buildplane_dev_password@localhost:5432/buildplane?sslmode=disable'
+export BUILDPLANE_REDIS_URL='redis://localhost:6379/0'
+```
+
+Run the three processes in separate terminals:
+
+```bash
+env GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/go-mod \
+  go run ./services/control-plane/cmd/buildplane-control-plane
+```
+
+```bash
+env GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/go-mod \
+  go run ./services/control-plane/cmd/buildplane-scheduler
+```
+
+```bash
+env GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/go-mod \
+  BUILDPLANE_WORKER_ID=local-worker-1 \
+  go run ./services/control-plane/cmd/buildplane-worker
+```
+
+Create a workflow run:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: phase3-demo-001' \
+  -d '{"workflow_name":"phase3-demo","input":{"case_id":"synthetic-case-001"}}'
+```
+
+Inspect durable state:
+
+```bash
+docker compose -f deploy/docker/docker-compose.postgres.yaml exec postgres \
+  psql -U buildplane -d buildplane \
+  -c 'select id, workflow_run_id, node_name, status, attempt, lease_worker_id, fencing_token from node_executions;'
+```

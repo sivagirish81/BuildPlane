@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-redis
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-redis
+    app.kubernetes.io/part-of: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-redis
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-redis
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-redis
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis

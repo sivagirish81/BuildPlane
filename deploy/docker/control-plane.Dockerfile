@@ -13,11 +13,23 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/buildplane-control-plane \
     ./services/control-plane/cmd/buildplane-control-plane
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /out/buildplane-scheduler \
+    ./services/control-plane/cmd/buildplane-scheduler
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /out/buildplane-worker \
+    ./services/control-plane/cmd/buildplane-worker
 
 FROM scratch
 
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /out/buildplane-control-plane /buildplane-control-plane
+COPY --from=build /out/buildplane-scheduler /buildplane-scheduler
+COPY --from=build /out/buildplane-worker /buildplane-worker
 COPY migrations /migrations
 
 USER 65532:65532
