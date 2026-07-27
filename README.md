@@ -254,3 +254,43 @@ docker compose -f deploy/docker/docker-compose.postgres.yaml exec postgres \
   psql -U buildplane -d buildplane \
   -c 'select node_name, worker_pool, status from node_executions order by created_at;'
 ```
+
+## Phase 7: Operator and Custom Resources
+
+Phase 7 adds a narrow `BuildPlaneRuntime` CRD and Go operator.
+
+Build and load the operator image:
+
+```bash
+docker build -f deploy/docker/operator.Dockerfile -t buildplane/operator:dev .
+kind load docker-image buildplane/operator:dev --name buildplane
+```
+
+Apply the CRD, operator, and sample runtime:
+
+```bash
+kubectl apply -f deploy/kind/buildplane-runtime-crd.yaml
+kubectl apply -f deploy/kind/buildplane-operator.yaml
+kubectl apply -f deploy/kind/buildplane-runtime-sample.yaml
+```
+
+Inspect the custom resource:
+
+```bash
+kubectl get buildplaneruntime -n buildplane-system
+kubectl get buildplaneruntime local-runtime -n buildplane-system -o yaml
+```
+
+Change desired worker pool size:
+
+```bash
+kubectl patch buildplaneruntime local-runtime -n buildplane-system \
+  --type merge \
+  -p '{"spec":{"workerPools":{"ai":{"replicas":2}}}}'
+```
+
+Then inspect the reconciled Deployment:
+
+```bash
+kubectl get deploy buildplane-worker-ai -n buildplane-system
+```

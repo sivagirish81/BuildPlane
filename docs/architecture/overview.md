@@ -201,3 +201,22 @@ flowchart LR
 The durable state model is unchanged. Worker pools decide which Pods should see
 which queue messages; PostgreSQL leases and fencing still decide which worker is
 allowed to execute and complete a node.
+
+## Current Phase 7 Runtime
+
+Phase 7 adds a narrow Kubernetes operator:
+
+```mermaid
+flowchart LR
+  User["kubectl apply BuildPlaneRuntime"] --> API["Kubernetes API server"]
+  API --> CR["BuildPlaneRuntime spec"]
+  Operator["buildplane-operator"] --> CR
+  Operator --> Scheduler["Deployment: buildplane-scheduler"]
+  Operator --> General["Deployment: buildplane-worker-general"]
+  Operator --> AI["Deployment: buildplane-worker-ai"]
+  Operator --> Status["BuildPlaneRuntime status.conditions"]
+```
+
+The operator reconciles only scheduler and worker pool replica counts. It does
+not manage workflow execution state, Redis messages, PostgreSQL rows, Secrets,
+or AI provider behavior.

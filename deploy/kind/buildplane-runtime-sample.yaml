@@ -1,0 +1,16 @@
+apiVersion: buildplane.io/v1alpha1
+kind: BuildPlaneRuntime
+metadata:
+  name: local-runtime
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: local-runtime
+    app.kubernetes.io/part-of: buildplane
+spec:
+  schedulerReplicas: 1
+  workerPools:
+    general:
+      replicas: 2
+    ai:
+      replicas: 1
+

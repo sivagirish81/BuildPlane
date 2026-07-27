@@ -152,6 +152,8 @@ Learning focus:
 
 ## Phase 7: Operator and Custom Resources
 
+Status: Complete
+
 Goal: Introduce a Go Kubernetes operator only after the plain objects are well
 understood.
 
