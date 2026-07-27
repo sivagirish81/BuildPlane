@@ -55,3 +55,39 @@ Then, in another terminal:
 ```bash
 curl http://localhost:8080/version
 ```
+
+## Phase 2: Durable Workflow Runs
+
+Start local PostgreSQL:
+
+```bash
+docker compose -f deploy/docker/docker-compose.postgres.yaml up -d
+```
+
+Run the control plane against PostgreSQL:
+
+```bash
+export BUILDPLANE_DATABASE_URL='postgres://buildplane:buildplane_dev_password@localhost:5432/buildplane?sslmode=disable'
+env GOCACHE=$PWD/.cache/go-build go run ./services/control-plane/cmd/buildplane-control-plane
+```
+
+Create a workflow run:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-001' \
+  -H 'X-Correlation-ID: local-demo-001' \
+  -d '{"workflow_name":"invoice-exception-demo","input":{"invoice_id":"synthetic-inv-001"}}'
+```
+
+Retry the same request with the same `Idempotency-Key`; it should return the
+same workflow run with `"replayed": true`.
+
+Inspect the database:
+
+```bash
+docker compose -f deploy/docker/docker-compose.postgres.yaml exec postgres \
+  psql -U buildplane -d buildplane \
+  -c 'select id, workflow_name, status, idempotency_key, created_at from workflow_runs;'
+```

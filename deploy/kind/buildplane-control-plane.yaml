@@ -34,6 +34,14 @@ spec:
         - name: control-plane
           image: buildplane/control-plane:dev
           imagePullPolicy: IfNotPresent
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: buildplane-postgres
+                  key: database-url
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              value: /migrations
           ports:
             - name: http
               containerPort: 8080

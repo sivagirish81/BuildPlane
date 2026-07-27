@@ -4,6 +4,7 @@ WORKDIR /src
 
 COPY go.work ./
 COPY services/control-plane/go.mod ./services/control-plane/go.mod
+COPY services/control-plane/go.sum ./services/control-plane/go.sum
 COPY services/control-plane ./services/control-plane
 
 ARG VERSION=dev
@@ -17,8 +18,10 @@ FROM scratch
 
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /out/buildplane-control-plane /buildplane-control-plane
+COPY migrations /migrations
 
 USER 65532:65532
 EXPOSE 8080
+ENV BUILDPLANE_MIGRATIONS_DIR=/migrations
 
 ENTRYPOINT ["/buildplane-control-plane"]

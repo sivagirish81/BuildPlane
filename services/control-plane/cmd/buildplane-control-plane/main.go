@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/sivagirish/buildplane/services/control-plane/internal/httpapi"
+	"github.com/sivagirish/buildplane/services/control-plane/internal/postgres"
+	"github.com/sivagirish/buildplane/services/control-plane/internal/workflows"
 )
 
 var version = "dev"
@@ -29,9 +32,43 @@ func run(logger *slog.Logger) error {
 		port = "8080"
 	}
 
+	databaseURL := os.Getenv("BUILDPLANE_DATABASE_URL")
+	if databaseURL == "" {
+		return fmt.Errorf("BUILDPLANE_DATABASE_URL is required")
+	}
+
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelStartup()
+
+	db, err := postgres.Open(startupCtx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("close postgres", "error", err)
+		}
+	}()
+
+	migrationsDir := os.Getenv("BUILDPLANE_MIGRATIONS_DIR")
+	if migrationsDir == "" {
+		migrationsDir = "migrations"
+	}
+	if err := postgres.Migrate(startupCtx, db, migrationsDir); err != nil {
+		return err
+	}
+
+	workflowRepository := postgres.NewWorkflowRepository(db)
+	workflowService := workflows.NewService(workflowRepository)
+
 	server := &http.Server{
-		Addr:              ":" + port,
-		Handler:           httpapi.NewServer(version),
+		Addr: ":" + port,
+		Handler: httpapi.NewServer(httpapi.Options{
+			Version:   version,
+			Logger:    logger,
+			Ready:     workflowRepository.Ping,
+			Workflows: workflowService,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
