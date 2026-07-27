@@ -5,6 +5,8 @@ WORKDIR /src
 COPY go.work ./
 COPY services/control-plane/go.mod ./services/control-plane/go.mod
 COPY services/control-plane/go.sum ./services/control-plane/go.sum
+COPY services/operator/go.mod ./services/operator/go.mod
+COPY services/operator/go.sum ./services/operator/go.sum
 COPY services/control-plane ./services/control-plane
 
 ARG VERSION=dev
