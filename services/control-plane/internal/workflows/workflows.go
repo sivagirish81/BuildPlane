@@ -39,6 +39,7 @@ type Run struct {
 	IdempotencyKey string
 	RequestHash    string
 	CorrelationID  string
+	TraceParent    string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -59,6 +60,7 @@ type CreateRunRequest struct {
 	Input          json.RawMessage
 	IdempotencyKey string
 	CorrelationID  string
+	TraceParent    string
 }
 
 type CreateRunParams struct {
@@ -69,6 +71,7 @@ type CreateRunParams struct {
 	IdempotencyKey  string
 	RequestHash     string
 	CorrelationID   string
+	TraceParent     string
 	InitialNodeName string
 }
 
@@ -116,6 +119,7 @@ func (s *Service) CreateRun(ctx context.Context, req CreateRunRequest) (Run, boo
 		IdempotencyKey:  idempotencyKey,
 		RequestHash:     requestHash(workflowName, input),
 		CorrelationID:   strings.TrimSpace(req.CorrelationID),
+		TraceParent:     strings.TrimSpace(req.TraceParent),
 		InitialNodeName: FirstNodeName(workflowName),
 	}
 

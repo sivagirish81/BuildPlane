@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sivagirish/buildplane/services/control-plane/internal/observability"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/postgres"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/queue"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/workflows"
@@ -64,9 +65,12 @@ func run(logger *slog.Logger) error {
 	repository := postgres.NewWorkflowRepository(db)
 	scheduler := workflows.NewScheduler(repository, redisQueue)
 	scheduler.BatchSize = envInt("BUILDPLANE_SCHEDULER_BATCH_SIZE", 10)
+	metrics := observability.NewRegistry("buildplane-scheduler")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	metricsErrCh := observability.StartMetricsServer(ctx, envString("BUILDPLANE_METRICS_ADDR", ":9090"), metrics, logger)
 
 	interval := envDuration("BUILDPLANE_SCHEDULER_INTERVAL", 2*time.Second)
 	ticker := time.NewTicker(interval)
@@ -74,20 +78,40 @@ func run(logger *slog.Logger) error {
 
 	logger.Info("starting scheduler", "interval", interval.String(), "batch_size", scheduler.BatchSize)
 	for {
+		start := time.Now()
 		published, seen, err := scheduler.RunOnce(ctx)
+		status := "ok"
 		if err != nil {
+			status = "error"
 			logger.Error("scheduler tick failed", "error", err)
 		} else {
 			logger.Info("scheduler tick completed", "published", published, "seen", seen)
 		}
+		metrics.Inc("buildplane_scheduler_ticks_total", map[string]string{"status": status})
+		metrics.Add("buildplane_scheduler_tick_duration_seconds_sum", map[string]string{"status": status}, time.Since(start).Seconds())
+		metrics.Inc("buildplane_scheduler_tick_duration_seconds_count", map[string]string{"status": status})
+		metrics.Add("buildplane_scheduler_outbox_events_seen_total", nil, float64(seen))
+		metrics.Add("buildplane_scheduler_outbox_events_published_total", nil, float64(published))
 
 		select {
 		case <-ctx.Done():
 			logger.Info("shutting down scheduler")
 			return nil
+		case err := <-metricsErrCh:
+			if err != nil {
+				return err
+			}
 		case <-ticker.C:
 		}
 	}
+}
+
+func envString(name string, fallback string) string {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func envInt(name string, fallback int) int {

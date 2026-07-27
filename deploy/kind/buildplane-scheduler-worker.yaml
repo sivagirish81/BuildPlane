@@ -31,6 +31,9 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - /buildplane-scheduler
+          ports:
+            - name: metrics
+              containerPort: 9090
           env:
             - name: BUILDPLANE_DATABASE_URL
               valueFrom:
@@ -57,6 +60,8 @@ spec:
                 configMapKeyRef:
                   name: buildplane-runtime-config
                   key: scheduler-interval
+            - name: BUILDPLANE_METRICS_ADDR
+              value: :9090
           resources:
             requests:
               cpu: 25m
@@ -134,6 +139,11 @@ spec:
                 configMapKeyRef:
                   name: buildplane-runtime-config
                   key: worker-drain-timeout
+            - name: BUILDPLANE_METRICS_ADDR
+              value: :9090
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               cpu: 25m
@@ -216,6 +226,11 @@ spec:
                 configMapKeyRef:
                   name: buildplane-runtime-config
                   key: ai-service-url
+            - name: BUILDPLANE_METRICS_ADDR
+              value: :9090
+          ports:
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               cpu: 50m
@@ -229,3 +244,54 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-scheduler-metrics
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-scheduler
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-scheduler
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-worker-general-metrics
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker-general
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-worker-general
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-worker-ai-metrics
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker-ai
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-worker-ai
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics

@@ -1,0 +1,267 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildplane-prometheus-config
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-prometheus
+    app.kubernetes.io/part-of: buildplane
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: buildplane
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - buildplane-control-plane:80
+              - buildplane-ai-service:8090
+              - buildplane-scheduler-metrics:9090
+              - buildplane-worker-general-metrics:9090
+              - buildplane-worker-ai-metrics:9090
+              - buildplane-operator-metrics:8080
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildplane-grafana-datasources
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-grafana
+    app.kubernetes.io/part-of: buildplane
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://buildplane-prometheus:9090
+        isDefault: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildplane-grafana-dashboards
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-grafana
+    app.kubernetes.io/part-of: buildplane
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: BuildPlane
+        folder: BuildPlane
+        type: file
+        disableDeletion: false
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildplane-grafana-dashboard-overview
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-grafana
+    app.kubernetes.io/part-of: buildplane
+data:
+  buildplane-overview.json: |
+    {
+      "title": "BuildPlane Overview",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": {
+        "from": "now-30m",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "API Requests",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "expr": "sum by (status) (rate(buildplane_http_requests_total[5m]))",
+              "legendFormat": "{{status}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Workflow Runs",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            {
+              "expr": "sum by (workflow_name, result) (rate(buildplane_workflow_runs_total[5m]))",
+              "legendFormat": "{{workflow_name}} {{result}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Worker Node Executions",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            {
+              "expr": "sum by (worker_pool, node_name, result) (rate(buildplane_worker_node_executions_total[5m]))",
+              "legendFormat": "{{worker_pool}} {{node_name}} {{result}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "AI Classifications",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            {
+              "expr": "sum by (provider, result) (rate(buildplane_ai_classifications_total[5m]))",
+              "legendFormat": "{{provider}} {{result}}"
+            }
+          ]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-prometheus
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-prometheus
+    app.kubernetes.io/part-of: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-prometheus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-prometheus
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.0.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: buildplane-prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-prometheus
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-prometheus
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-grafana
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-grafana
+    app.kubernetes.io/part-of: buildplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-grafana
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.5.0
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Admin
+            - name: GF_USERS_DEFAULT_THEME
+              value: light
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: datasources
+          configMap:
+            name: buildplane-grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: buildplane-grafana-dashboards
+        - name: dashboards
+          configMap:
+            name: buildplane-grafana-dashboard-overview
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-grafana
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-grafana
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+

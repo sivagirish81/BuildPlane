@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sivagirish/buildplane/services/control-plane/internal/observability"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/workflows"
 )
 
@@ -23,6 +24,7 @@ type Options struct {
 	Logger    *slog.Logger
 	Ready     func(context.Context) error
 	Workflows *workflows.Service
+	Metrics   *observability.Registry
 }
 
 type Server struct {
@@ -30,6 +32,7 @@ type Server struct {
 	logger    *slog.Logger
 	ready     func(context.Context) error
 	workflows *workflows.Service
+	metrics   *observability.Registry
 }
 
 // NewServer builds the HTTP surface for the control-plane process.
@@ -39,6 +42,7 @@ func NewServer(options Options) http.Handler {
 		logger:    options.Logger,
 		ready:     options.Ready,
 		workflows: options.Workflows,
+		metrics:   options.Metrics,
 	}
 	if server.version == "" {
 		server.version = "dev"
@@ -54,6 +58,9 @@ func NewServer(options Options) http.Handler {
 	mux.HandleFunc("/healthz", getOnly(server.healthz))
 	mux.HandleFunc("/readyz", getOnly(server.readyz))
 	mux.HandleFunc("/version", getOnly(server.versionHandler))
+	if server.metrics != nil {
+		mux.Handle("/metrics", server.metrics.Handler())
+	}
 	mux.HandleFunc("/v1/workflow-runs", server.workflowRuns)
 	mux.HandleFunc("/v1/workflow-runs/", server.workflowRunByID)
 	return server.withRequestLogging(mux)
@@ -138,6 +145,7 @@ func (s *Server) workflowRuns(w http.ResponseWriter, r *http.Request) {
 		Input:          request.Input,
 		IdempotencyKey: idempotencyKey,
 		CorrelationID:  correlationIDFromRequest(r),
+		TraceParent:    traceParentFromRequest(r),
 	})
 	if err != nil {
 		s.writeWorkflowError(w, r, err)
@@ -147,6 +155,16 @@ func (s *Server) workflowRuns(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
+	}
+	if s.metrics != nil {
+		result := "replayed"
+		if created {
+			result = "created"
+		}
+		s.metrics.Inc("buildplane_workflow_runs_total", map[string]string{
+			"workflow_name": run.WorkflowName,
+			"result":        result,
+		})
 	}
 
 	writeJSON(w, status, workflowRunResponse{
@@ -241,9 +259,15 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 		if strings.TrimSpace(correlationID) == "" {
 			correlationID = newCorrelationID()
 		}
+		traceparent := observability.TraceParentFromRequest(r)
+		if traceparent == "" {
+			traceparent = observability.NewTraceParent()
+		}
 
 		w.Header().Set("X-Correlation-ID", correlationID)
+		w.Header().Set(observability.TraceParentHeader, traceparent)
 		r = r.WithContext(context.WithValue(r.Context(), correlationIDKey{}, correlationID))
+		r = r.WithContext(context.WithValue(r.Context(), traceParentKey{}, traceparent))
 
 		recorder := &statusRecorder{
 			ResponseWriter: w,
@@ -252,6 +276,25 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(recorder, r)
 
+		if s.metrics != nil {
+			statusClass := statusClass(recorder.status)
+			s.metrics.Inc("buildplane_http_requests_total", map[string]string{
+				"method": r.Method,
+				"path":   routeLabel(r.URL.Path),
+				"status": statusClass,
+			})
+			s.metrics.Inc("buildplane_http_request_duration_seconds_count", map[string]string{
+				"method": r.Method,
+				"path":   routeLabel(r.URL.Path),
+				"status": statusClass,
+			})
+			s.metrics.Add("buildplane_http_request_duration_seconds_sum", map[string]string{
+				"method": r.Method,
+				"path":   routeLabel(r.URL.Path),
+				"status": statusClass,
+			}, time.Since(start).Seconds())
+		}
+
 		s.logger.Info(
 			"http request",
 			"method", r.Method,
@@ -259,8 +302,37 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 			"status", recorder.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 			"correlation_id", correlationID,
+			"trace_id", observability.TraceID(traceParentFromRequest(r)),
 		)
 	})
+}
+
+func routeLabel(path string) string {
+	if path == "/healthz" || path == "/readyz" || path == "/version" || path == "/metrics" || path == "/v1/workflow-runs" {
+		return path
+	}
+	if strings.HasPrefix(path, "/v1/workflow-runs/") {
+		if strings.HasSuffix(path, "/audit") {
+			return "/v1/workflow-runs/{id}/audit"
+		}
+		return "/v1/workflow-runs/{id}"
+	}
+	return "other"
+}
+
+func statusClass(status int) string {
+	switch {
+	case status >= 500:
+		return "5xx"
+	case status >= 400:
+		return "4xx"
+	case status >= 300:
+		return "3xx"
+	case status >= 200:
+		return "2xx"
+	default:
+		return "unknown"
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
@@ -286,6 +358,13 @@ func correlationIDFromRequest(r *http.Request) string {
 	return ""
 }
 
+func traceParentFromRequest(r *http.Request) string {
+	if value, ok := r.Context().Value(traceParentKey{}).(string); ok {
+		return value
+	}
+	return ""
+}
+
 func newCorrelationID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -296,6 +375,7 @@ func newCorrelationID() string {
 }
 
 type correlationIDKey struct{}
+type traceParentKey struct{}
 
 type statusRecorder struct {
 	http.ResponseWriter
@@ -323,6 +403,7 @@ type workflowRunDTO struct {
 	Status        workflows.Status `json:"status"`
 	Input         json.RawMessage  `json:"input"`
 	CorrelationID string           `json:"correlation_id"`
+	TraceParent   string           `json:"traceparent"`
 	CreatedAt     time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
 }
@@ -359,6 +440,7 @@ func toWorkflowRunDTO(run workflows.Run) workflowRunDTO {
 		Status:        run.Status,
 		Input:         run.Input,
 		CorrelationID: run.CorrelationID,
+		TraceParent:   run.TraceParent,
 		CreatedAt:     run.CreatedAt,
 		UpdatedAt:     run.UpdatedAt,
 	}

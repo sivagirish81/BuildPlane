@@ -1,0 +1,57 @@
+{
+  "title": "BuildPlane Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "API Requests",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(buildplane_http_requests_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Workflow Runs",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (workflow_name, result) (rate(buildplane_workflow_runs_total[5m]))",
+          "legendFormat": "{{workflow_name}} {{result}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Node Executions",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (worker_pool, node_name, result) (rate(buildplane_worker_node_executions_total[5m]))",
+          "legendFormat": "{{worker_pool}} {{node_name}} {{result}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "AI Classifications",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (provider, result) (rate(buildplane_ai_classifications_total[5m]))",
+          "legendFormat": "{{provider}} {{result}}"
+        }
+      ]
+    }
+  ]
+}
+

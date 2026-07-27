@@ -40,6 +40,8 @@ type NodeInput struct {
 	WorkflowRunID string
 	WorkflowName  string
 	NodeName      string
+	CorrelationID string
+	TraceParent   string
 	Input         json.RawMessage
 }
 
@@ -152,6 +154,7 @@ func classifyIssue(ctx context.Context, input NodeInput, dependencies NodeDepend
 	result, err := dependencies.AIClassifier.ClassifyIssue(ctx, IssueClassificationRequest{
 		WorkflowRunID:   input.WorkflowRunID,
 		NodeName:        input.NodeName,
+		TraceParent:     input.TraceParent,
 		CaseID:          payload.CaseID,
 		Title:           payload.Title,
 		Description:     payload.Description,

@@ -86,7 +86,7 @@ func (r *WorkflowRepository) CreateRun(ctx context.Context, params workflows.Cre
 
 func (r *WorkflowRepository) GetRun(ctx context.Context, id string) (workflows.Run, error) {
 	const query = `
-SELECT id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, created_at, updated_at
+SELECT id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, traceparent, created_at, updated_at
 FROM workflow_runs
 WHERE id = $1`
 
@@ -154,10 +154,11 @@ INSERT INTO workflow_runs (
 	input,
 	idempotency_key,
 	request_hash,
-	correlation_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+	correlation_id,
+	traceparent
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (idempotency_key) DO NOTHING
-RETURNING id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, created_at, updated_at`
+RETURNING id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, traceparent, created_at, updated_at`
 
 	return scanRun(tx.QueryRowContext(
 		ctx,
@@ -169,6 +170,7 @@ RETURNING id, workflow_name, status, input, idempotency_key, request_hash, corre
 		params.IdempotencyKey,
 		params.RequestHash,
 		params.CorrelationID,
+		params.TraceParent,
 	))
 }
 
@@ -200,7 +202,7 @@ INSERT INTO node_executions (
 
 func getRunByIdempotencyKey(ctx context.Context, tx *sql.Tx, idempotencyKey string) (workflows.Run, error) {
 	const query = `
-SELECT id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, created_at, updated_at
+SELECT id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, traceparent, created_at, updated_at
 FROM workflow_runs
 WHERE idempotency_key = $1`
 
@@ -228,6 +230,7 @@ func scanRun(row rowScanner) (workflows.Run, error) {
 		&run.IdempotencyKey,
 		&run.RequestHash,
 		&run.CorrelationID,
+		&run.TraceParent,
 		&run.CreatedAt,
 		&run.UpdatedAt,
 	); err != nil {

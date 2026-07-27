@@ -4,32 +4,33 @@ Last updated: 2026-07-27
 
 ## Current Phase
 
-Phase 7: Operator and Custom Resources
+Phase 8: Observability
 
 Status: Complete
 
 ## Completed Items
 
-- Added a namespaced `BuildPlaneRuntime` CRD in
-  `deploy/kind/buildplane-runtime-crd.yaml`.
-- Added a sample `BuildPlaneRuntime` in
-  `deploy/kind/buildplane-runtime-sample.yaml`.
-- Added a Go operator module in `services/operator`.
-- Added typed `BuildPlaneRuntime` API structs with manual runtime object
-  registration.
-- Added a controller-runtime reconciler for scheduler/general-worker/AI-worker
-  Deployment replica counts.
-- Added status reporting with `Ready` conditions and observed Deployment
-  availability.
-- Added operator tests for desired Deployment replica planning.
-- Added operator Kubernetes RBAC, ServiceAccount, probes, and Deployment in
-  `deploy/kind/buildplane-operator.yaml`.
-- Added `deploy/docker/operator.Dockerfile`.
-- Updated `go.work` to include the operator module.
-- Added ADR 0007 for the `BuildPlaneRuntime` CRD and operator.
-- Added the Phase 7 learning artifact at
-  `docs/learning/phase-07-operator-and-custom-resources.md`.
-- Updated README, roadmap, and architecture docs for Phase 7.
+- Added a small Go Prometheus text metrics registry in
+  `services/control-plane/internal/observability`.
+- Added Go trace context helpers for W3C `traceparent`.
+- Added migration `migrations/0005_workflow_traceparent.sql`.
+- Persisted `traceparent` on workflow runs and hydrated it into worker leases.
+- Added `/metrics` to the Go API.
+- Added separate metrics servers for scheduler and worker processes.
+- Added worker node execution metrics and AI client request metrics.
+- Added `/metrics`, request metrics, classification metrics, structured log
+  events, and traceparent echoing to the Python AI service.
+- Added metrics Services for scheduler, worker pools, and operator.
+- Added `deploy/kind/buildplane-observability.yaml` with local Prometheus and
+  Grafana.
+- Added starter Grafana dashboard JSON at
+  `deploy/grafana/buildplane-overview.json`.
+- Added tests for metrics rendering, traceparent parsing, and AI client
+  traceparent propagation.
+- Added ADR 0008 for the first observability slice.
+- Added the Phase 8 learning artifact at
+  `docs/learning/phase-08-observability.md`.
+- Updated README, roadmap, and architecture docs for Phase 8.
 
 ## Remaining Limitations
 
@@ -41,6 +42,9 @@ Status: Complete
   create/adopt every BuildPlane resource yet.
 - The CRD schema is hand-written. Generated deepcopy/CRD code and webhooks are
   deferred.
+- The observability stack is a first slice. It does not yet include a full
+  OpenTelemetry SDK, collector, spans, exemplars, alert rules, or persistent
+  metrics storage.
 - The AI service currently has one classifier endpoint. It does not yet expose
   extraction, embeddings, tool-use planning, eval hooks, or provider metrics.
 - The OpenAI provider is implemented but not live-tested in this phase.
@@ -65,7 +69,7 @@ Status: Complete
 - The full BuildPlane vision is large. The roadmap intentionally starts with a
   tiny Kubernetes workload to prevent premature architecture.
 - Kubernetes concepts can feel abstract until inspected live. After Docker is
-  running, Phases 1 through 7 should be exercised manually in a real local
+  running, Phases 1 through 8 should be exercised manually in a real local
   `kind` cluster using the documented commands.
 - The migration runner is intentionally small. It should be revisited before
   complex schema evolution, rollbacks, checksums, or multi-instance migration
@@ -78,11 +82,11 @@ Status: Complete
 
 ## Next Phase
 
-Phase 8: Observability
+Phase 9: Demo Workflows
 
-The next phase should add production-grade visibility across the API,
-scheduler, workers, AI service, and operator with structured logs, metrics, and
-tracing.
+The next phase should build synthetic invoice and freight exception workflows
+on top of the execution platform, using reusable components, human approval
+points, and guarded mock external actions.
 
 ## Test Evidence
 
@@ -90,7 +94,7 @@ Commands executed:
 
 ```bash
 .cache/ai-service-venv/bin/python -m pytest ai-service/tests
-gofmt -w services/control-plane/cmd/buildplane-worker/main.go services/control-plane/internal/postgres/execution_repository.go services/control-plane/internal/postgres/workflow_repository.go services/control-plane/internal/queue/redis.go services/control-plane/internal/queue/redis_test.go services/control-plane/internal/workflows/definitions.go services/control-plane/internal/workflows/definitions_test.go services/control-plane/internal/workflows/execution.go
+gofmt -w services/control-plane/internal/observability/metrics.go services/control-plane/internal/observability/trace.go services/control-plane/internal/observability/server.go services/control-plane/internal/observability/metrics_test.go services/control-plane/internal/httpapi/server.go services/control-plane/cmd/buildplane-control-plane/main.go services/control-plane/cmd/buildplane-scheduler/main.go services/control-plane/cmd/buildplane-worker/main.go services/control-plane/internal/workflows/workflows.go services/control-plane/internal/workflows/execution.go services/control-plane/internal/workflows/definitions.go services/control-plane/internal/workflows/ai_client.go services/control-plane/internal/workflows/ai_client_test.go services/control-plane/internal/postgres/workflow_repository.go services/control-plane/internal/postgres/execution_repository.go
 gofmt -w services/operator/api/v1alpha1/groupversion_info.go services/operator/api/v1alpha1/buildplaneruntime_types.go services/operator/cmd/buildplane-operator/main.go services/operator/internal/controller/buildplaneruntime_controller.go services/operator/internal/controller/buildplaneruntime_controller_test.go
 env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go test ./services/control-plane/...
 env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go test ./services/operator/...
@@ -103,8 +107,9 @@ docker compose -f deploy/docker/docker-compose.postgres.yaml up -d
 docker build -f deploy/docker/ai-service.Dockerfile -t buildplane/ai-service:dev .
 docker build -f deploy/docker/control-plane.Dockerfile -t buildplane/control-plane:dev .
 docker build -f deploy/docker/operator.Dockerfile -t buildplane/operator:dev .
-ruby -e 'require "yaml"; %w[deploy/kind/buildplane-control-plane.yaml deploy/kind/buildplane-config.yaml deploy/kind/buildplane-rbac.yaml deploy/kind/buildplane-redis.yaml deploy/kind/buildplane-scheduler-worker.yaml deploy/kind/buildplane-ai-service.yaml deploy/kind/buildplane-runtime-crd.yaml deploy/kind/buildplane-operator.yaml deploy/kind/buildplane-runtime-sample.yaml].each { |path| docs = YAML.load_stream(File.read(path)); puts "#{path}: #{docs.map { |d| d.fetch("kind") }.join(",")}" }'
+ruby -e 'require "yaml"; %w[deploy/kind/buildplane-control-plane.yaml deploy/kind/buildplane-config.yaml deploy/kind/buildplane-rbac.yaml deploy/kind/buildplane-redis.yaml deploy/kind/buildplane-scheduler-worker.yaml deploy/kind/buildplane-ai-service.yaml deploy/kind/buildplane-runtime-crd.yaml deploy/kind/buildplane-operator.yaml deploy/kind/buildplane-runtime-sample.yaml deploy/kind/buildplane-observability.yaml].each { |path| docs = YAML.load_stream(File.read(path)); puts "#{path}: #{docs.map { |d| d.fetch("kind") }.join(",")}" }'
 ruby -e 'sql = File.read("migrations/0004_worker_pools.sql"); %w[worker_pool classify_issue node_executions_worker_pool_check idx_node_executions_schedulable_pool].each { |needle| abort "missing #{needle}" unless sql.include?(needle) }; puts "migration contains worker_pool routing metadata"'
+ruby -e 'sql = File.read("migrations/0005_workflow_traceparent.sql"); abort "missing traceparent" unless sql.include?("traceparent"); puts "migration contains workflow traceparent metadata"'
 git diff --check
 ```
 
@@ -120,11 +125,12 @@ Results:
   failed.
 - Docker image builds failed because Docker daemon access failed.
 - Offline YAML parsing passed for control-plane, config, RBAC, Redis,
-  scheduler, worker pools, AI service, CRD, operator, and runtime sample
-  manifests.
+  scheduler, worker pools, AI service, CRD, operator, runtime sample, and
+  observability manifests.
 - Offline migration check passed for `worker_pool` routing metadata.
+- Offline migration check passed for workflow `traceparent` metadata.
 - `git diff --check` passed.
 
 ## Proposed Commit Message
 
-`feat: add buildplane runtime operator`
+`feat: add first observability slice`

@@ -294,3 +294,43 @@ Then inspect the reconciled Deployment:
 ```bash
 kubectl get deploy buildplane-worker-ai -n buildplane-system
 ```
+
+## Phase 8: Observability
+
+Phase 8 adds `/metrics`, trace context propagation, Prometheus, and Grafana.
+
+Inspect service metrics locally:
+
+```bash
+curl http://localhost:8080/metrics
+curl http://localhost:8090/metrics
+```
+
+Apply the local observability stack:
+
+```bash
+kubectl apply -f deploy/kind/buildplane-observability.yaml
+```
+
+Port-forward Prometheus and Grafana:
+
+```bash
+kubectl port-forward -n buildplane-system service/buildplane-prometheus 9090:9090
+kubectl port-forward -n buildplane-system service/buildplane-grafana 3000:3000
+```
+
+The starter Grafana dashboard is stored at:
+
+```text
+deploy/grafana/buildplane-overview.json
+```
+
+Create a traced workflow run:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: phase8-demo-001' \
+  -H 'traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001","customer_message":"Urgent invoice charge dispute needs escalation"}}'
+```

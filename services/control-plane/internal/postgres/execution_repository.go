@@ -490,12 +490,12 @@ func scanOutboxEvents(rows *sql.Rows) ([]workflows.OutboxEvent, error) {
 
 func hydrateLeaseWorkflow(ctx context.Context, tx *sql.Tx, lease *workflows.Lease) error {
 	const query = `
-SELECT workflow_name, input
+SELECT workflow_name, input, correlation_id, traceparent
 FROM workflow_runs
 WHERE id = $1`
 
 	var inputBytes []byte
-	if err := tx.QueryRowContext(ctx, query, lease.WorkflowRunID).Scan(&lease.WorkflowName, &inputBytes); err != nil {
+	if err := tx.QueryRowContext(ctx, query, lease.WorkflowRunID).Scan(&lease.WorkflowName, &inputBytes, &lease.CorrelationID, &lease.TraceParent); err != nil {
 		return fmt.Errorf("hydrate lease workflow: %w", err)
 	}
 	lease.Input = json.RawMessage(inputBytes)

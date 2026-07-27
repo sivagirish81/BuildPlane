@@ -220,3 +220,24 @@ flowchart LR
 The operator reconciles only scheduler and worker pool replica counts. It does
 not manage workflow execution state, Redis messages, PostgreSQL rows, Secrets,
 or AI provider behavior.
+
+## Current Phase 8 Runtime
+
+Phase 8 adds the first observability layer:
+
+```mermaid
+flowchart LR
+  API["API /metrics"] --> Prom["Prometheus"]
+  Scheduler["Scheduler metrics :9090"] --> Prom
+  General["General worker metrics :9090"] --> Prom
+  AIWorker["AI worker metrics :9090"] --> Prom
+  AI["AI service /metrics"] --> Prom
+  Operator["Operator metrics :8080"] --> Prom
+  Prom --> Grafana["Grafana dashboard"]
+  API -. traceparent .-> Worker["Worker lease context"]
+  Worker -. traceparent .-> AI
+```
+
+Metrics are intentionally bounded by labels like service, status, workflow name,
+worker pool, node name, provider, and result. Workflow run IDs stay in audit
+records and logs rather than metric labels.
