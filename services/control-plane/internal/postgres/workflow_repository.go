@@ -31,7 +31,33 @@ func (r *WorkflowRepository) CreateRun(ctx context.Context, params workflows.Cre
 
 	run, err := insertRun(ctx, tx, params)
 	if err == nil {
-		if err := insertInitialNodeExecution(ctx, tx, run.ID, params.InitialNodeName); err != nil {
+		if err := insertAuditRecord(ctx, tx, auditRecordParams{
+			WorkflowRunID: run.ID,
+			EventType:     "workflow_run.created",
+			ActorType:     "api",
+			ActorID:       params.CorrelationID,
+			Details: map[string]any{
+				"workflow_name": run.WorkflowName,
+				"status":        string(run.Status),
+			},
+		}); err != nil {
+			return workflows.Run{}, false, err
+		}
+		nodeID, err := insertInitialNodeExecution(ctx, tx, run.ID, params.InitialNodeName)
+		if err != nil {
+			return workflows.Run{}, false, err
+		}
+		if err := insertAuditRecord(ctx, tx, auditRecordParams{
+			WorkflowRunID:   run.ID,
+			NodeExecutionID: nodeID,
+			EventType:       "node_execution.created",
+			ActorType:       "api",
+			ActorID:         params.CorrelationID,
+			Details: map[string]any{
+				"node_name": params.InitialNodeName,
+				"status":    string(workflows.NodeStatusPending),
+			},
+		}); err != nil {
 			return workflows.Run{}, false, err
 		}
 		if err := tx.Commit(); err != nil {
@@ -73,6 +99,47 @@ WHERE id = $1`
 	return run, nil
 }
 
+func (r *WorkflowRepository) ListAuditRecords(ctx context.Context, workflowRunID string) ([]workflows.AuditRecord, error) {
+	const query = `
+SELECT id, workflow_run_id, node_execution_id, event_type, actor_type, actor_id, details, created_at
+FROM audit_records
+WHERE workflow_run_id = $1
+ORDER BY id`
+
+	rows, err := r.db.QueryContext(ctx, query, workflowRunID)
+	if err != nil {
+		return nil, fmt.Errorf("list audit records: %w", err)
+	}
+	defer rows.Close()
+
+	var records []workflows.AuditRecord
+	for rows.Next() {
+		var record workflows.AuditRecord
+		var nodeExecutionID sql.NullString
+		var details []byte
+		if err := rows.Scan(
+			&record.ID,
+			&record.WorkflowRunID,
+			&nodeExecutionID,
+			&record.EventType,
+			&record.ActorType,
+			&record.ActorID,
+			&details,
+			&record.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan audit record: %w", err)
+		}
+		record.NodeExecutionID = nullString(nodeExecutionID)
+		record.Details = json.RawMessage(details)
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan audit records: %w", err)
+	}
+
+	return records, nil
+}
+
 func (r *WorkflowRepository) Ping(ctx context.Context) error {
 	return r.db.PingContext(ctx)
 }
@@ -104,14 +171,14 @@ RETURNING id, workflow_name, status, input, idempotency_key, request_hash, corre
 	))
 }
 
-func insertInitialNodeExecution(ctx context.Context, tx *sql.Tx, workflowRunID string, nodeName string) error {
+func insertInitialNodeExecution(ctx context.Context, tx *sql.Tx, workflowRunID string, nodeName string) (string, error) {
 	if nodeName == "" {
-		nodeName = "phase3.bootstrap"
+		nodeName = "validate_input"
 	}
 
 	nodeID, err := newID()
 	if err != nil {
-		return fmt.Errorf("generate node execution id: %w", err)
+		return "", fmt.Errorf("generate node execution id: %w", err)
 	}
 
 	const query = `
@@ -123,9 +190,9 @@ INSERT INTO node_executions (
 ) VALUES ($1, $2, $3, $4)`
 
 	if _, err := tx.ExecContext(ctx, query, nodeID, workflowRunID, nodeName, string(workflows.NodeStatusPending)); err != nil {
-		return fmt.Errorf("insert initial node execution: %w", err)
+		return "", fmt.Errorf("insert initial node execution: %w", err)
 	}
-	return nil
+	return nodeID, nil
 }
 
 func getRunByIdempotencyKey(ctx context.Context, tx *sql.Tx, idempotencyKey string) (workflows.Run, error) {

@@ -156,7 +156,9 @@ func (r *fakeWorkerRepository) AcquireNodeExecutionLease(_ context.Context, node
 	return Lease{
 		NodeExecutionID: nodeExecutionID,
 		WorkflowRunID:   "run-1",
-		NodeName:        "phase3.bootstrap",
+		WorkflowName:    LocalDemoWorkflowName,
+		NodeName:        "validate_input",
+		Input:           json.RawMessage(`{"case_id":"synthetic-case-001"}`),
 		WorkerID:        workerID,
 		Attempt:         1,
 		FencingToken:    1,
@@ -169,12 +171,12 @@ func (r *fakeWorkerRepository) HeartbeatNodeExecution(context.Context, string, s
 	return nil
 }
 
-func (r *fakeWorkerRepository) CompleteNodeExecution(context.Context, string, string, int64, json.RawMessage) error {
+func (r *fakeWorkerRepository) CompleteNodeExecution(context.Context, string, string, int64, json.RawMessage, string) error {
 	r.completed = true
 	return nil
 }
 
-func (r *fakeWorkerRepository) FailNodeExecution(context.Context, string, string, int64, string) error {
+func (r *fakeWorkerRepository) FailNodeExecution(context.Context, string, string, int64, string, int) error {
 	return nil
 }
 

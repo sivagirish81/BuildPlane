@@ -86,6 +86,8 @@ Learning focus:
 
 ## Phase 4: Local End-to-End Workflow
 
+Status: Complete
+
 Goal: Execute a small deterministic workflow from API request to completed run.
 
 Planned behavior:

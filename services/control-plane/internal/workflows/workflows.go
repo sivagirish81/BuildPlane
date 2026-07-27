@@ -43,6 +43,17 @@ type Run struct {
 	UpdatedAt      time.Time
 }
 
+type AuditRecord struct {
+	ID              int64
+	WorkflowRunID   string
+	NodeExecutionID string
+	EventType       string
+	ActorType       string
+	ActorID         string
+	Details         json.RawMessage
+	CreatedAt       time.Time
+}
+
 type CreateRunRequest struct {
 	WorkflowName   string
 	Input          json.RawMessage
@@ -64,6 +75,7 @@ type CreateRunParams struct {
 type Repository interface {
 	CreateRun(ctx context.Context, params CreateRunParams) (Run, bool, error)
 	GetRun(ctx context.Context, id string) (Run, error)
+	ListAuditRecords(ctx context.Context, workflowRunID string) ([]AuditRecord, error)
 	Ping(ctx context.Context) error
 }
 
@@ -104,7 +116,7 @@ func (s *Service) CreateRun(ctx context.Context, req CreateRunRequest) (Run, boo
 		IdempotencyKey:  idempotencyKey,
 		RequestHash:     requestHash(workflowName, input),
 		CorrelationID:   strings.TrimSpace(req.CorrelationID),
-		InitialNodeName: "phase3.bootstrap",
+		InitialNodeName: FirstNodeName(workflowName),
 	}
 
 	return s.repository.CreateRun(ctx, params)
@@ -116,6 +128,14 @@ func (s *Service) GetRun(ctx context.Context, id string) (Run, error) {
 		return Run{}, ErrMissingID
 	}
 	return s.repository.GetRun(ctx, id)
+}
+
+func (s *Service) ListAuditRecords(ctx context.Context, workflowRunID string) ([]AuditRecord, error) {
+	workflowRunID = strings.TrimSpace(workflowRunID)
+	if workflowRunID == "" {
+		return nil, ErrMissingID
+	}
+	return s.repository.ListAuditRecords(ctx, workflowRunID)
 }
 
 func canonicalInput(input json.RawMessage) (json.RawMessage, error) {

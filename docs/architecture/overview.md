@@ -145,3 +145,21 @@ flowchart LR
 Redis is not authoritative. A Redis message tells a worker what to try; the
 PostgreSQL lease decides whether the worker is allowed to run or complete the
 task.
+
+## Current Phase 4 Runtime
+
+Phase 4 adds a local deterministic workflow:
+
+```mermaid
+flowchart LR
+  Create["POST phase4.local-demo"] --> V["validate_input"]
+  V --> S["compose_summary"]
+  S --> Done["workflow succeeded"]
+  V --> Audit["audit_records"]
+  S --> Audit
+  Done --> Audit
+```
+
+Node ordering is application-defined in Go code for now. Completion of one node
+creates the next pending node inside the same PostgreSQL transaction. If a node
+fails, retry behavior is bounded by that node's `MaxAttempts`.

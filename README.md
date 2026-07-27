@@ -139,3 +139,31 @@ docker compose -f deploy/docker/docker-compose.postgres.yaml exec postgres \
   psql -U buildplane -d buildplane \
   -c 'select id, workflow_run_id, node_name, status, attempt, lease_worker_id, fencing_token from node_executions;'
 ```
+
+## Phase 4: Local End-to-End Workflow
+
+Phase 4 replaces the placeholder worker result with a two-node deterministic
+workflow named `phase4.local-demo`.
+
+Create a local workflow run:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: phase4-demo-001' \
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
+```
+
+Inspect the audit trail:
+
+```bash
+curl -i http://localhost:8080/v1/workflow-runs/<workflow-run-id>/audit
+```
+
+The expected node order is:
+
+```text
+validate_input -> compose_summary
+```
+
+Each meaningful transition is also recorded in `audit_records`.
