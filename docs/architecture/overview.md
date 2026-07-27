@@ -264,3 +264,25 @@ The approval boundary is durable. A worker can pause the run, but only the API
 decision endpoint can resume it. Approved decisions create the guarded mock
 action node; rejected decisions cancel the workflow. No real external system is
 called in this phase.
+
+## Current Phase 10 Runtime
+
+Phase 10 adds release gates for reusable AI components:
+
+```mermaid
+flowchart LR
+  Candidate["POST component version"] --> Version["component_versions: candidate"]
+  Version --> Affected["affected workflow detection"]
+  Version --> Eval["synthetic evaluation"]
+  Eval --> Results["component_evaluation_runs/results"]
+  Results --> Canary["canary state"]
+  Canary --> Promote["promote"]
+  Promote --> Current["new promoted version"]
+  Promote --> Previous["previous version superseded"]
+  Current --> Rollback["rollback"]
+  Rollback --> Restored["previous version promoted"]
+```
+
+The canary percentage is durable desired release state. It does not yet route
+live workflow traffic. The important behavior in this phase is the gate:
+evaluation must pass before canary, and canary must exist before promotion.
