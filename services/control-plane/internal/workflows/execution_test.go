@@ -172,7 +172,7 @@ func (r *fakeWorkerRepository) HeartbeatNodeExecution(context.Context, string, s
 	return nil
 }
 
-func (r *fakeWorkerRepository) CompleteNodeExecution(context.Context, string, string, int64, json.RawMessage, string) error {
+func (r *fakeWorkerRepository) CompleteNodeExecution(context.Context, string, string, int64, json.RawMessage, string, bool) error {
 	r.completed = true
 	return nil
 }

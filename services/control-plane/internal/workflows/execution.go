@@ -70,6 +70,7 @@ type Lease struct {
 	WorkerPool      string
 	CorrelationID   string
 	TraceParent     string
+	HumanDecision   json.RawMessage
 	Input           json.RawMessage
 	WorkerID        string
 	Attempt         int
@@ -87,7 +88,7 @@ type SchedulerRepository interface {
 type WorkerRepository interface {
 	AcquireNodeExecutionLease(ctx context.Context, nodeExecutionID string, workerID string, leaseDuration time.Duration) (Lease, error)
 	HeartbeatNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, leaseDuration time.Duration) error
-	CompleteNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, result json.RawMessage, nextNodeName string) error
+	CompleteNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, result json.RawMessage, nextNodeName string, waitForHuman bool) error
 	FailNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, errText string, maxAttempts int) error
 }
 
@@ -200,6 +201,7 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 		NodeName:      lease.NodeName,
 		CorrelationID: lease.CorrelationID,
 		TraceParent:   lease.TraceParent,
+		HumanDecision: lease.HumanDecision,
 		Input:         lease.Input,
 	}, w.Dependencies)
 	if err != nil {
@@ -213,7 +215,7 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	if err := w.repository.CompleteNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, output.Result, output.NextNodeName); err != nil {
+	if err := w.repository.CompleteNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, output.Result, output.NextNodeName, output.WaitForHuman); err != nil {
 		return true, err
 	}
 	w.recordNodeExecution(lease, "succeeded", time.Since(start))

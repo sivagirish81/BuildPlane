@@ -1,0 +1,13 @@
+{
+  "workflow_name": "demo.freight-exception",
+  "input": {
+    "case_id": "synthetic-freight-case-001",
+    "title": "Freight delivery exception",
+    "description": "Synthetic shipment arrived late with a carrier exception code.",
+    "customer_message": "The receiving team needs a review before the shipment is closed.",
+    "source": "demo",
+    "shipment_id": "synthetic-ship-001",
+    "carrier_name": "Synthetic Freight Lines",
+    "exception_code": "LATE_DELIVERY"
+  }
+}

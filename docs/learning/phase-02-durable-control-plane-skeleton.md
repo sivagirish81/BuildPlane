@@ -27,7 +27,7 @@ curl -i http://localhost:8080/version
 curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-001' \
-  -d '{"workflow_name":"invoice-exception-demo","input":{"invoice_id":"synthetic-inv-001"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
 ```
 
 ### PostgreSQL as Source of Truth
@@ -107,19 +107,19 @@ Inspect or debug it:
 curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-001' \
-  -d '{"workflow_name":"invoice-exception-demo","input":{"invoice_id":"synthetic-inv-001"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
 
 # Same request should return 200 and replayed true.
 curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-001' \
-  -d '{"workflow_name":"invoice-exception-demo","input":{"invoice_id":"synthetic-inv-001"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
 
 # Different request with same key should return 409.
 curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-001' \
-  -d '{"workflow_name":"invoice-exception-demo","input":{"invoice_id":"synthetic-inv-002"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-002"}}'
 ```
 
 ### Transaction Boundary
@@ -241,7 +241,7 @@ curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-001' \
   -H 'X-Correlation-ID: debug-001' \
-  -d '{"workflow_name":"invoice-exception-demo","input":{"invoice_id":"synthetic-inv-001"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
 ```
 
 Read a workflow:

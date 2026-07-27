@@ -246,7 +246,7 @@ WHERE id = $1
 	return requireOneRow(result, workflows.ErrStaleLease)
 }
 
-func (r *WorkflowRepository) CompleteNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, result json.RawMessage, nextNodeName string) error {
+func (r *WorkflowRepository) CompleteNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, result json.RawMessage, nextNodeName string, waitForHuman bool) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin complete node execution: %w", err)
@@ -296,7 +296,27 @@ RETURNING workflow_run_id`
 		return err
 	}
 
-	if nextNodeName != "" {
+	if waitForHuman {
+		if _, err := tx.ExecContext(ctx, `
+UPDATE workflow_runs
+SET status = 'waiting_for_human',
+	updated_at = now()
+WHERE id = $1`, workflowRunID); err != nil {
+			return fmt.Errorf("mark workflow waiting for human: %w", err)
+		}
+		if err := insertAuditRecord(ctx, tx, auditRecordParams{
+			WorkflowRunID:   workflowRunID,
+			NodeExecutionID: nodeExecutionID,
+			EventType:       "workflow_run.waiting_for_human",
+			ActorType:       "worker",
+			ActorID:         workerID,
+			Details: map[string]any{
+				"waiting_node": nodeName,
+			},
+		}); err != nil {
+			return err
+		}
+	} else if nextNodeName != "" {
 		nextNodeID, err := insertInitialNodeExecution(ctx, tx, workflowRunID, nextNodeName)
 		if err != nil {
 			return err
@@ -490,15 +510,34 @@ func scanOutboxEvents(rows *sql.Rows) ([]workflows.OutboxEvent, error) {
 
 func hydrateLeaseWorkflow(ctx context.Context, tx *sql.Tx, lease *workflows.Lease) error {
 	const query = `
-SELECT workflow_name, input, correlation_id, traceparent
-FROM workflow_runs
-WHERE id = $1`
+SELECT
+	w.workflow_name,
+	w.input,
+	w.correlation_id,
+	w.traceparent,
+	COALESCE((
+		SELECT jsonb_build_object(
+			'decision_key', decision_key,
+			'decision', decision,
+			'actor_id', actor_id,
+			'reason', reason,
+			'created_at', created_at
+		)
+		FROM human_decisions
+		WHERE workflow_run_id = w.id
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1
+	), '{}'::jsonb)
+FROM workflow_runs AS w
+WHERE w.id = $1`
 
 	var inputBytes []byte
-	if err := tx.QueryRowContext(ctx, query, lease.WorkflowRunID).Scan(&lease.WorkflowName, &inputBytes, &lease.CorrelationID, &lease.TraceParent); err != nil {
+	var decisionBytes []byte
+	if err := tx.QueryRowContext(ctx, query, lease.WorkflowRunID).Scan(&lease.WorkflowName, &inputBytes, &lease.CorrelationID, &lease.TraceParent, &decisionBytes); err != nil {
 		return fmt.Errorf("hydrate lease workflow: %w", err)
 	}
 	lease.Input = json.RawMessage(inputBytes)
+	lease.HumanDecision = json.RawMessage(decisionBytes)
 	return nil
 }
 

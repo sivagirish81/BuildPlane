@@ -241,3 +241,26 @@ flowchart LR
 Metrics are intentionally bounded by labels like service, status, workflow name,
 worker pool, node name, provider, and result. Workflow run IDs stay in audit
 records and logs rather than metric labels.
+
+## Current Phase 9 Runtime
+
+Phase 9 adds synthetic demo workflows with a human approval checkpoint:
+
+```mermaid
+flowchart LR
+  Create["POST demo workflow"] --> Validate["validate_demo_input"]
+  Validate --> AI["classify_issue"]
+  AI --> Plan["plan_demo_resolution"]
+  Plan --> Approval["await_human_approval"]
+  Approval --> Waiting["workflow_run: waiting_for_human"]
+  Human["POST /decisions"] --> Decision["human_decisions"]
+  Decision --> Resume["record_mock_action"]
+  Resume --> Summary["compose_demo_summary"]
+  Summary --> Done["workflow succeeded"]
+  Decision -. rejected .-> Canceled["workflow canceled"]
+```
+
+The approval boundary is durable. A worker can pause the run, but only the API
+decision endpoint can resume it. Approved decisions create the guarded mock
+action node; rejected decisions cancel the workflow. No real external system is
+called in this phase.

@@ -196,6 +196,8 @@ Learning focus:
 
 ## Phase 9: Demo Workflows
 
+Status: Complete
+
 Goal: Build the invoice and freight exception workflows on top of the execution
 platform.
 

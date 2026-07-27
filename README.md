@@ -78,7 +78,7 @@ curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-001' \
   -H 'X-Correlation-ID: local-demo-001' \
-  -d '{"workflow_name":"invoice-exception-demo","input":{"invoice_id":"synthetic-inv-001"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
 ```
 
 Retry the same request with the same `Idempotency-Key`; it should return the
@@ -129,7 +129,7 @@ Create a workflow run:
 curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: phase3-demo-001' \
-  -d '{"workflow_name":"phase3-demo","input":{"case_id":"synthetic-case-001"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
 ```
 
 Inspect durable state:
@@ -333,4 +333,46 @@ curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Idempotency-Key: phase8-demo-001' \
   -H 'traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' \
   -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001","customer_message":"Urgent invoice charge dispute needs escalation"}}'
+```
+
+## Phase 9: Demo Workflows
+
+Phase 9 adds synthetic invoice and freight exception workflows with a human
+approval checkpoint:
+
+```text
+validate_demo_input -> classify_issue -> plan_demo_resolution -> await_human_approval -> record_mock_action -> compose_demo_summary
+```
+
+Create the invoice demo:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: invoice-demo-001' \
+  --data @examples/demo-workflows/invoice-exception.json
+```
+
+Create the freight demo:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: freight-demo-001' \
+  --data @examples/demo-workflows/freight-exception.json
+```
+
+When a run reaches `waiting_for_human`, approve it:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/workflow-runs/<workflow-run-id>/decisions \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: invoice-demo-approval-001' \
+  -d '{"decision":"approved","actor_id":"operator-1","reason":"Synthetic approval for the learning demo"}'
+```
+
+Inspect the audit trail:
+
+```bash
+curl -i http://localhost:8080/v1/workflow-runs/<workflow-run-id>/audit
 ```

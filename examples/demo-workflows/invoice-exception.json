@@ -1,0 +1,13 @@
+{
+  "workflow_name": "demo.invoice-exception",
+  "input": {
+    "case_id": "synthetic-inv-case-001",
+    "title": "Invoice price mismatch",
+    "description": "Synthetic invoice total is higher than the purchase order total.",
+    "customer_message": "Please review this invoice before payment is released.",
+    "source": "demo",
+    "invoice_id": "synthetic-inv-001",
+    "vendor_name": "Synthetic Vendor Co",
+    "amount_disputed": 1250.5
+  }
+}
