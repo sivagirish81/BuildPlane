@@ -225,6 +225,32 @@ func TestGetWorkflowRun(t *testing.T) {
 	}
 }
 
+func TestListWorkflowRuns(t *testing.T) {
+	server := testServer(t)
+	headers := map[string]string{
+		"Idempotency-Key": "demo-key",
+		"Content-Type":    "application/json",
+	}
+	created := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"phase4.local-demo"}`), headers)
+	createdBody := decodeWorkflowRunResponse(t, created)
+
+	response := request(t, server, http.MethodGet, "/v1/workflow-runs?limit=10", nil, nil)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+	var body workflowRunListResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode workflow run list response: %v", err)
+	}
+	if len(body.WorkflowRuns) != 1 {
+		t.Fatalf("expected one workflow run, got %d", len(body.WorkflowRuns))
+	}
+	if body.WorkflowRuns[0].ID != createdBody.WorkflowRun.ID {
+		t.Fatalf("expected run id %q, got %q", createdBody.WorkflowRun.ID, body.WorkflowRuns[0].ID)
+	}
+}
+
 func TestGetWorkflowRunReturnsNotFound(t *testing.T) {
 	response := request(t, testServer(t), http.MethodGet, "/v1/workflow-runs/missing", nil, nil)
 
@@ -409,6 +435,14 @@ func (r *fakeRepository) GetRun(_ context.Context, id string) (workflows.Run, er
 		return workflows.Run{}, workflows.ErrNotFound
 	}
 	return run, nil
+}
+
+func (r *fakeRepository) ListRuns(context.Context, int) ([]workflows.Run, error) {
+	runs := make([]workflows.Run, 0, len(r.byID))
+	for _, run := range r.byID {
+		runs = append(runs, run)
+	}
+	return runs, nil
 }
 
 func (r *fakeRepository) ListAuditRecords(_ context.Context, workflowRunID string) ([]workflows.AuditRecord, error) {

@@ -129,6 +129,13 @@ func (r *fakeRepository) GetRun(_ context.Context, id string) (Run, error) {
 	return Run{}, ErrNotFound
 }
 
+func (r *fakeRepository) ListRuns(context.Context, int) ([]Run, error) {
+	if r.run.ID == "" {
+		return nil, nil
+	}
+	return []Run{r.run}, nil
+}
+
 func (r *fakeRepository) ListAuditRecords(context.Context, string) ([]AuditRecord, error) {
 	return nil, nil
 }

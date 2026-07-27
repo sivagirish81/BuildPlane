@@ -100,6 +100,36 @@ WHERE id = $1`
 	return run, nil
 }
 
+func (r *WorkflowRepository) ListRuns(ctx context.Context, limit int) ([]workflows.Run, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	const query = `
+SELECT id, workflow_name, status, input, idempotency_key, request_hash, correlation_id, traceparent, created_at, updated_at
+FROM workflow_runs
+ORDER BY updated_at DESC, created_at DESC
+LIMIT $1`
+
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []workflows.Run
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan workflow run: %w", err)
+		}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan workflow runs: %w", err)
+	}
+	return runs, nil
+}
+
 func (r *WorkflowRepository) ListAuditRecords(ctx context.Context, workflowRunID string) ([]workflows.AuditRecord, error) {
 	const query = `
 SELECT id, workflow_run_id, node_execution_id, event_type, actor_type, actor_id, details, created_at

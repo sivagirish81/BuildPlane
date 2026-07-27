@@ -117,6 +117,7 @@ type CreateRunParams struct {
 type Repository interface {
 	CreateRun(ctx context.Context, params CreateRunParams) (Run, bool, error)
 	GetRun(ctx context.Context, id string) (Run, error)
+	ListRuns(ctx context.Context, limit int) ([]Run, error)
 	ListAuditRecords(ctx context.Context, workflowRunID string) ([]AuditRecord, error)
 	SubmitHumanDecision(ctx context.Context, params SubmitHumanDecisionParams) (HumanDecisionResult, bool, error)
 	Ping(ctx context.Context) error
@@ -175,6 +176,13 @@ func (s *Service) GetRun(ctx context.Context, id string) (Run, error) {
 		return Run{}, ErrMissingID
 	}
 	return s.repository.GetRun(ctx, id)
+}
+
+func (s *Service) ListRuns(ctx context.Context, limit int) ([]Run, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	return s.repository.ListRuns(ctx, limit)
 }
 
 func (s *Service) ListAuditRecords(ctx context.Context, workflowRunID string) ([]AuditRecord, error) {
