@@ -12,6 +12,7 @@ const (
 	LocalDemoWorkflowName        = "phase4.local-demo"
 	InvoiceExceptionWorkflowName = "demo.invoice-exception"
 	FreightExceptionWorkflowName = "demo.freight-exception"
+	IssueClassifierComponentName = "issue_classifier"
 )
 
 const (
@@ -27,6 +28,12 @@ var (
 type WorkflowDefinition struct {
 	Name  string
 	Nodes []NodeDefinition
+}
+
+type ComponentDependency struct {
+	WorkflowName  string `json:"workflow_name"`
+	NodeName      string `json:"node_name"`
+	ComponentName string `json:"component_name"`
 }
 
 type NodeDefinition struct {
@@ -165,6 +172,29 @@ func DependencyGraphFor(workflowName string) ([]string, bool) {
 		nodes = append(nodes, node.Name)
 	}
 	return nodes, true
+}
+
+func ComponentDependenciesFor(componentName string) []ComponentDependency {
+	if componentName != IssueClassifierComponentName {
+		return nil
+	}
+	return []ComponentDependency{
+		{
+			WorkflowName:  LocalDemoWorkflowName,
+			NodeName:      "classify_issue",
+			ComponentName: componentName,
+		},
+		{
+			WorkflowName:  InvoiceExceptionWorkflowName,
+			NodeName:      "classify_issue",
+			ComponentName: componentName,
+		},
+		{
+			WorkflowName:  FreightExceptionWorkflowName,
+			NodeName:      "classify_issue",
+			ComponentName: componentName,
+		},
+	}
 }
 
 func validateDemoInput(_ context.Context, input NodeInput, _ NodeDependencies) (NodeOutput, error) {

@@ -160,6 +160,49 @@ Inspect the audit trail:
 curl -i http://localhost:8080/v1/workflow-runs/<workflow-run-id>/audit
 ```
 
+## Phase 10: Evaluation, Canary, and Promotion
+
+Phase 10 adds a release-safety loop for the reusable `issue_classifier`
+component:
+
+```text
+candidate -> evaluated -> canary -> promoted
+```
+
+Create a candidate component version:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/component-versions \
+  -H 'Content-Type: application/json' \
+  --data @examples/component-versions/issue-classifier-v2.json
+```
+
+Check which workflows are affected:
+
+```bash
+curl -i http://localhost:8080/v1/components/issue_classifier/affected-workflows
+```
+
+Run the synthetic evaluation dataset:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/component-versions/<component-version-id>/evaluations
+```
+
+Start canary, promote, and rollback:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/component-versions/<component-version-id>/canary \
+  -H 'Content-Type: application/json' \
+  -d '{"percent":10}'
+
+curl -i -X POST http://localhost:8080/v1/component-versions/<component-version-id>/promote
+
+curl -i -X POST http://localhost:8080/v1/components/issue_classifier/rollback \
+  -H 'Content-Type: application/json' \
+  -d '{"actor_id":"operator-1","reason":"Synthetic rollback exercise"}'
+```
+
 The expected node order is:
 
 ```text

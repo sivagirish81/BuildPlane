@@ -14,6 +14,7 @@ import (
 	"github.com/sivagirish/buildplane/services/control-plane/internal/httpapi"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/observability"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/postgres"
+	"github.com/sivagirish/buildplane/services/control-plane/internal/releases"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/workflows"
 )
 
@@ -61,6 +62,7 @@ func run(logger *slog.Logger) error {
 
 	workflowRepository := postgres.NewWorkflowRepository(db)
 	workflowService := workflows.NewService(workflowRepository)
+	releaseService := releases.NewService(workflowRepository)
 	metrics := observability.NewRegistry("buildplane-control-plane")
 
 	server := &http.Server{
@@ -70,6 +72,7 @@ func run(logger *slog.Logger) error {
 			Logger:    logger,
 			Ready:     workflowRepository.Ping,
 			Workflows: workflowService,
+			Releases:  releaseService,
 			Metrics:   metrics,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

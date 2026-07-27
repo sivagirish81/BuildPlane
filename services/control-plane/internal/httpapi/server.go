@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sivagirish/buildplane/services/control-plane/internal/observability"
+	"github.com/sivagirish/buildplane/services/control-plane/internal/releases"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/workflows"
 )
 
@@ -24,6 +25,7 @@ type Options struct {
 	Logger    *slog.Logger
 	Ready     func(context.Context) error
 	Workflows *workflows.Service
+	Releases  *releases.Service
 	Metrics   *observability.Registry
 }
 
@@ -32,6 +34,7 @@ type Server struct {
 	logger    *slog.Logger
 	ready     func(context.Context) error
 	workflows *workflows.Service
+	releases  *releases.Service
 	metrics   *observability.Registry
 }
 
@@ -42,6 +45,7 @@ func NewServer(options Options) http.Handler {
 		logger:    options.Logger,
 		ready:     options.Ready,
 		workflows: options.Workflows,
+		releases:  options.Releases,
 		metrics:   options.Metrics,
 	}
 	if server.version == "" {
@@ -63,6 +67,9 @@ func NewServer(options Options) http.Handler {
 	}
 	mux.HandleFunc("/v1/workflow-runs", server.workflowRuns)
 	mux.HandleFunc("/v1/workflow-runs/", server.workflowRunByID)
+	mux.HandleFunc("/v1/component-versions", server.componentVersions)
+	mux.HandleFunc("/v1/component-versions/", server.componentVersionByID)
+	mux.HandleFunc("/v1/components/", server.componentByName)
 	return server.withRequestLogging(mux)
 }
 
@@ -381,6 +388,30 @@ func routeLabel(path string) string {
 			return "/v1/workflow-runs/{id}/audit"
 		}
 		return "/v1/workflow-runs/{id}"
+	}
+	if path == "/v1/component-versions" {
+		return path
+	}
+	if strings.HasPrefix(path, "/v1/component-versions/") {
+		if strings.HasSuffix(path, "/evaluations") {
+			return "/v1/component-versions/{id}/evaluations"
+		}
+		if strings.HasSuffix(path, "/canary") {
+			return "/v1/component-versions/{id}/canary"
+		}
+		if strings.HasSuffix(path, "/promote") {
+			return "/v1/component-versions/{id}/promote"
+		}
+		return "/v1/component-versions/{id}"
+	}
+	if strings.HasPrefix(path, "/v1/components/") {
+		if strings.HasSuffix(path, "/affected-workflows") {
+			return "/v1/components/{name}/affected-workflows"
+		}
+		if strings.HasSuffix(path, "/rollback") {
+			return "/v1/components/{name}/rollback"
+		}
+		return "/v1/components/{name}"
 	}
 	return "other"
 }

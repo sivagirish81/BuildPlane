@@ -1,0 +1,24 @@
+{
+  "component_name": "issue_classifier",
+  "version": "v2",
+  "prompt_version": "issue_classifier_v2",
+  "change_summary": "Adds explicit freight and access classification keywords for the synthetic demo workflows.",
+  "created_by": "operator-1",
+  "spec": {
+    "rules": [
+      {
+        "category": "billing",
+        "keywords": ["invoice", "payment", "charge", "vendor"]
+      },
+      {
+        "category": "logistics",
+        "keywords": ["freight", "shipment", "carrier", "delivery"]
+      },
+      {
+        "category": "access",
+        "keywords": ["access", "login", "portal"]
+      }
+    ],
+    "default_category": "general"
+  }
+}
