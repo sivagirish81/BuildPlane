@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/sivagirish/buildplane/services/control-plane/internal/observability"
 )
 
 type NodeStatus string
@@ -66,6 +68,8 @@ type Lease struct {
 	WorkflowName    string
 	NodeName        string
 	WorkerPool      string
+	CorrelationID   string
+	TraceParent     string
 	Input           json.RawMessage
 	WorkerID        string
 	Attempt         int
@@ -150,6 +154,7 @@ type Worker struct {
 	WorkerID      string
 	LeaseDuration time.Duration
 	Dependencies  NodeDependencies
+	Metrics       *observability.Registry
 }
 
 func NewWorker(repository WorkerRepository, consumer QueueConsumer, workerID string) *Worker {
@@ -188,13 +193,17 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 		return true, err
 	}
 
+	start := time.Now()
 	output, maxAttempts, err := ExecuteNode(ctx, NodeInput{
 		WorkflowRunID: lease.WorkflowRunID,
 		WorkflowName:  lease.WorkflowName,
 		NodeName:      lease.NodeName,
+		CorrelationID: lease.CorrelationID,
+		TraceParent:   lease.TraceParent,
 		Input:         lease.Input,
 	}, w.Dependencies)
 	if err != nil {
+		w.recordNodeExecution(lease, "failed", time.Since(start))
 		if failErr := w.repository.FailNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, err.Error(), maxAttempts); failErr != nil {
 			return true, failErr
 		}
@@ -207,10 +216,25 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 	if err := w.repository.CompleteNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, output.Result, output.NextNodeName); err != nil {
 		return true, err
 	}
+	w.recordNodeExecution(lease, "succeeded", time.Since(start))
 
 	if err := w.consumer.AckNodeExecution(ctx, message.ID); err != nil {
 		return true, err
 	}
 
 	return true, nil
+}
+
+func (w *Worker) recordNodeExecution(lease Lease, result string, duration time.Duration) {
+	if w.Metrics == nil {
+		return
+	}
+	labels := map[string]string{
+		"worker_pool": lease.WorkerPool,
+		"node_name":   lease.NodeName,
+		"result":      result,
+	}
+	w.Metrics.Inc("buildplane_worker_node_executions_total", labels)
+	w.Metrics.Inc("buildplane_worker_node_execution_duration_seconds_count", labels)
+	w.Metrics.Add("buildplane_worker_node_execution_duration_seconds_sum", labels, duration.Seconds())
 }

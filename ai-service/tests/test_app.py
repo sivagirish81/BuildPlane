@@ -33,6 +33,18 @@ def test_classify_issue_returns_structured_result() -> None:
     assert body["urgency"] == "high"
     assert body["provider"] == "mock"
     assert body["evidence"][0]["source"] == "test"
+    assert response.headers["traceparent"]
+
+
+def test_metrics_endpoint_contains_bounded_metrics() -> None:
+    client = TestClient(create_app(settings=Settings(), provider=MockIssueClassifier()))
+
+    client.get("/healthz")
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "buildplane_ai_http_requests_total" in response.text
+    assert 'service="buildplane-ai-service"' in response.text
 
 
 def test_classify_issue_requires_context() -> None:
@@ -41,4 +53,3 @@ def test_classify_issue_requires_context() -> None:
     response = client.post("/v1/classify-issue", json={"case_id": "case-001"})
 
     assert response.status_code == 422
-

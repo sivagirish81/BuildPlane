@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sivagirish/buildplane/services/control-plane/internal/observability"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/postgres"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/queue"
 	"github.com/sivagirish/buildplane/services/control-plane/internal/workflows"
@@ -76,6 +77,8 @@ func run(logger *slog.Logger) error {
 	repository := postgres.NewWorkflowRepository(db)
 	worker := workflows.NewWorker(repository, redisQueue, workerID)
 	worker.LeaseDuration = envDuration("BUILDPLANE_WORKER_LEASE_DURATION", 30*time.Second)
+	metrics := observability.NewRegistry("buildplane-worker")
+	worker.Metrics = metrics
 	drainTimeout := envDuration("BUILDPLANE_WORKER_DRAIN_TIMEOUT", 25*time.Second)
 	aiServiceURL := os.Getenv("BUILDPLANE_AI_SERVICE_URL")
 	if aiServiceURL == "" {
@@ -85,12 +88,14 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	aiClient.SetMetrics(metrics)
 	worker.Dependencies = workflows.NodeDependencies{
 		AIClassifier: aiClient,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	metricsErrCh := observability.StartMetricsServer(ctx, envString("BUILDPLANE_METRICS_ADDR", ":9090"), metrics, logger)
 
 	logger.Info(
 		"starting worker",
@@ -116,7 +121,23 @@ func run(logger *slog.Logger) error {
 		} else if processed {
 			logger.Info("worker processed node execution", "worker_id", workerID, "worker_pool", workerPool)
 		}
+
+		select {
+		case err := <-metricsErrCh:
+			if err != nil {
+				return err
+			}
+		default:
+		}
 	}
+}
+
+func envString(name string, fallback string) string {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func envDuration(name string, fallback time.Duration) time.Duration {

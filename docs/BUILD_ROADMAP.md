@@ -175,6 +175,8 @@ Learning focus:
 
 ## Phase 8: Observability
 
+Status: Complete
+
 Goal: Add production-grade visibility across the control plane and workers.
 
 Planned behavior:

@@ -21,6 +21,7 @@ class Urgency(str, Enum):
 class ClassificationRequest(BaseModel):
     workflow_run_id: str | None = None
     node_name: str | None = None
+    traceparent: str | None = None
     case_id: str = Field(min_length=1)
     title: str | None = None
     description: str | None = None

@@ -124,4 +124,20 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
-
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-operator-metrics
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-operator
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-operator
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: metrics
