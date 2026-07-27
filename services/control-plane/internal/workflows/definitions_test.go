@@ -69,6 +69,75 @@ func TestWorkerPoolForNode(t *testing.T) {
 	}
 }
 
+func TestDemoWorkflowPausesForHumanApproval(t *testing.T) {
+	graph, ok := DependencyGraphFor(InvoiceExceptionWorkflowName)
+	if !ok {
+		t.Fatal("expected invoice demo dependency graph")
+	}
+	if got, want := graph[0], "validate_demo_input"; got != want {
+		t.Fatalf("expected first node %q, got %q", want, got)
+	}
+	if next := NextNodeAfterApproval(InvoiceExceptionWorkflowName); next != "record_mock_action" {
+		t.Fatalf("expected approval successor record_mock_action, got %q", next)
+	}
+
+	input := json.RawMessage(`{
+		"case_id": "synthetic-inv-case-001",
+		"title": "Invoice price mismatch",
+		"description": "Synthetic invoice total is higher than purchase order",
+		"customer_message": "Please review this invoice before payment",
+		"source": "demo",
+		"invoice_id": "synthetic-inv-001",
+		"vendor_name": "Synthetic Vendor",
+		"amount_disputed": 1250.50
+	}`)
+
+	output, _, err := ExecuteNode(context.Background(), NodeInput{
+		WorkflowRunID: "run-1",
+		WorkflowName:  InvoiceExceptionWorkflowName,
+		NodeName:      "await_human_approval",
+		Input:         input,
+	}, NodeDependencies{})
+	if err != nil {
+		t.Fatalf("execute await_human_approval: %v", err)
+	}
+	if !output.WaitForHuman {
+		t.Fatal("expected node to wait for a human")
+	}
+	if output.NextNodeName != "" {
+		t.Fatalf("expected no automatic successor while waiting, got %q", output.NextNodeName)
+	}
+}
+
+func TestMockActionRequiresApprovedHumanDecision(t *testing.T) {
+	_, _, err := ExecuteNode(context.Background(), NodeInput{
+		WorkflowName: InvoiceExceptionWorkflowName,
+		NodeName:     "record_mock_action",
+		Input:        json.RawMessage(`{"case_id":"synthetic-inv-case-001"}`),
+	}, NodeDependencies{})
+	if err == nil {
+		t.Fatal("expected mock action to fail without human approval")
+	}
+
+	output, _, err := ExecuteNode(context.Background(), NodeInput{
+		WorkflowName: InvoiceExceptionWorkflowName,
+		NodeName:     "record_mock_action",
+		Input:        json.RawMessage(`{"case_id":"synthetic-inv-case-001"}`),
+		HumanDecision: json.RawMessage(`{
+			"decision_key": "approve-1",
+			"decision": "approved",
+			"actor_id": "operator-1",
+			"reason": "synthetic demo approval"
+		}`),
+	}, NodeDependencies{})
+	if err != nil {
+		t.Fatalf("execute record_mock_action: %v", err)
+	}
+	if output.NextNodeName != "compose_demo_summary" {
+		t.Fatalf("expected next compose_demo_summary, got %q", output.NextNodeName)
+	}
+}
+
 func TestExecuteLocalWorkflowRejectsMissingCaseID(t *testing.T) {
 	_, _, err := ExecuteNode(context.Background(), NodeInput{
 		WorkflowName: LocalDemoWorkflowName,

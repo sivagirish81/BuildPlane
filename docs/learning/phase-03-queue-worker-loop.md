@@ -210,7 +210,7 @@ Create work:
 curl -i -X POST http://localhost:8080/v1/workflow-runs \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: phase3-demo-001' \
-  -d '{"workflow_name":"phase3-demo","input":{"case_id":"synthetic-case-001"}}'
+  -d '{"workflow_name":"phase4.local-demo","input":{"case_id":"synthetic-case-001"}}'
 ```
 
 Inspect state:

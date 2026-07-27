@@ -95,7 +95,7 @@ func TestCreateWorkflowRun(t *testing.T) {
 		"Content-Type":     "application/json",
 	}
 	response := request(t, testServer(t), http.MethodPost, "/v1/workflow-runs", []byte(`{
-		"workflow_name": "invoice-demo",
+		"workflow_name": "phase4.local-demo",
 		"input": {"invoice_id": "synthetic-inv-001"}
 	}`), headers)
 
@@ -107,8 +107,8 @@ func TestCreateWorkflowRun(t *testing.T) {
 	if body.WorkflowRun.ID == "" {
 		t.Fatal("expected workflow run id")
 	}
-	if body.WorkflowRun.WorkflowName != "invoice-demo" {
-		t.Fatalf("expected workflow name invoice-demo, got %q", body.WorkflowRun.WorkflowName)
+	if body.WorkflowRun.WorkflowName != "phase4.local-demo" {
+		t.Fatalf("expected workflow name phase4.local-demo, got %q", body.WorkflowRun.WorkflowName)
 	}
 	if body.WorkflowRun.Status != workflows.StatusQueued {
 		t.Fatalf("expected queued status, got %q", body.WorkflowRun.Status)
@@ -121,13 +121,40 @@ func TestCreateWorkflowRun(t *testing.T) {
 	}
 }
 
+func TestCreateInvoiceDemoWorkflowRun(t *testing.T) {
+	response := request(t, testServer(t), http.MethodPost, "/v1/workflow-runs", []byte(`{
+		"workflow_name": "demo.invoice-exception",
+		"input": {
+			"case_id": "synthetic-inv-case-001",
+			"title": "Invoice price mismatch",
+			"description": "Synthetic invoice total is higher than purchase order",
+			"customer_message": "Please review this invoice before payment",
+			"source": "demo",
+			"invoice_id": "synthetic-inv-001",
+			"vendor_name": "Synthetic Vendor",
+			"amount_disputed": 1250.50
+		}
+	}`), map[string]string{
+		"Idempotency-Key": "demo-invoice-key",
+		"Content-Type":    "application/json",
+	})
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusCreated, response.Code, response.Body.String())
+	}
+	body := decodeWorkflowRunResponse(t, response)
+	if body.WorkflowRun.WorkflowName != "demo.invoice-exception" {
+		t.Fatalf("expected invoice demo workflow, got %q", body.WorkflowRun.WorkflowName)
+	}
+}
+
 func TestCreateWorkflowRunReplaysSameIdempotencyKeyAndBody(t *testing.T) {
 	server := testServer(t)
 	headers := map[string]string{
 		"Idempotency-Key": "demo-key",
 		"Content-Type":    "application/json",
 	}
-	body := []byte(`{"workflow_name":"invoice-demo","input":{"invoice_id":"synthetic-inv-001"}}`)
+	body := []byte(`{"workflow_name":"phase4.local-demo","input":{"invoice_id":"synthetic-inv-001"}}`)
 
 	first := request(t, server, http.MethodPost, "/v1/workflow-runs", body, headers)
 	second := request(t, server, http.MethodPost, "/v1/workflow-runs", body, headers)
@@ -156,8 +183,8 @@ func TestCreateWorkflowRunRejectsIdempotencyConflict(t *testing.T) {
 		"Content-Type":    "application/json",
 	}
 
-	first := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"invoice-demo","input":{"invoice_id":"one"}}`), headers)
-	second := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"invoice-demo","input":{"invoice_id":"two"}}`), headers)
+	first := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"phase4.local-demo","input":{"invoice_id":"one"}}`), headers)
+	second := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"phase4.local-demo","input":{"invoice_id":"two"}}`), headers)
 
 	if first.Code != http.StatusCreated {
 		t.Fatalf("expected first status %d, got %d", http.StatusCreated, first.Code)
@@ -168,7 +195,7 @@ func TestCreateWorkflowRunRejectsIdempotencyConflict(t *testing.T) {
 }
 
 func TestCreateWorkflowRunRequiresIdempotencyKey(t *testing.T) {
-	response := request(t, testServer(t), http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"invoice-demo"}`), map[string]string{
+	response := request(t, testServer(t), http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"phase4.local-demo"}`), map[string]string{
 		"Content-Type": "application/json",
 	})
 
@@ -183,7 +210,7 @@ func TestGetWorkflowRun(t *testing.T) {
 		"Idempotency-Key": "demo-key",
 		"Content-Type":    "application/json",
 	}
-	created := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"invoice-demo"}`), headers)
+	created := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"phase4.local-demo"}`), headers)
 	createdBody := decodeWorkflowRunResponse(t, created)
 
 	response := request(t, server, http.MethodGet, "/v1/workflow-runs/"+createdBody.WorkflowRun.ID, nil, nil)
@@ -212,7 +239,7 @@ func TestGetWorkflowRunAudit(t *testing.T) {
 		"Idempotency-Key": "demo-key",
 		"Content-Type":    "application/json",
 	}
-	created := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"invoice-demo"}`), headers)
+	created := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"phase4.local-demo"}`), headers)
 	createdBody := decodeWorkflowRunResponse(t, created)
 
 	response := request(t, server, http.MethodGet, "/v1/workflow-runs/"+createdBody.WorkflowRun.ID+"/audit", nil, nil)
@@ -230,6 +257,52 @@ func TestGetWorkflowRunAudit(t *testing.T) {
 	}
 	if body.AuditRecords[0].EventType != "workflow_run.created" {
 		t.Fatalf("expected workflow_run.created, got %q", body.AuditRecords[0].EventType)
+	}
+}
+
+func TestSubmitHumanDecisionApprovesWaitingRun(t *testing.T) {
+	repository := newFakeRepository()
+	server := NewServer(Options{
+		Version:   "test-version",
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Ready:     repository.Ping,
+		Workflows: workflows.NewService(repository),
+	})
+	headers := map[string]string{
+		"Idempotency-Key": "demo-key",
+		"Content-Type":    "application/json",
+	}
+	created := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"demo.invoice-exception","input":{"case_id":"synthetic-inv-case-001"}}`), headers)
+	createdBody := decodeWorkflowRunResponse(t, created)
+
+	run := repository.byID[createdBody.WorkflowRun.ID]
+	run.Status = workflows.StatusWaitingForHuman
+	repository.byID[run.ID] = run
+
+	response := request(t, server, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/decisions", []byte(`{
+		"decision": "approved",
+		"actor_id": "operator-1",
+		"reason": "synthetic demo approval"
+	}`), map[string]string{
+		"Idempotency-Key": "approve-1",
+		"Content-Type":    "application/json",
+	})
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, response.Code, response.Body.String())
+	}
+	var body humanDecisionResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode human decision response: %v", err)
+	}
+	if body.WorkflowRun.Status != workflows.StatusQueued {
+		t.Fatalf("expected queued run after approval, got %q", body.WorkflowRun.Status)
+	}
+	if body.NextNodeName != "record_mock_action" {
+		t.Fatalf("expected record_mock_action next node, got %q", body.NextNodeName)
+	}
+	if body.Replayed {
+		t.Fatal("expected first decision submission")
 	}
 }
 
@@ -283,6 +356,7 @@ type fakeRepository struct {
 	byID             map[string]workflows.Run
 	byIdempotencyKey map[string]string
 	audit            map[string][]workflows.AuditRecord
+	decisions        map[string]workflows.HumanDecision
 }
 
 func newFakeRepository() *fakeRepository {
@@ -290,6 +364,7 @@ func newFakeRepository() *fakeRepository {
 		byID:             map[string]workflows.Run{},
 		byIdempotencyKey: map[string]string{},
 		audit:            map[string][]workflows.AuditRecord{},
+		decisions:        map[string]workflows.HumanDecision{},
 	}
 }
 
@@ -342,6 +417,53 @@ func (r *fakeRepository) ListAuditRecords(_ context.Context, workflowRunID strin
 		return nil, workflows.ErrNotFound
 	}
 	return records, nil
+}
+
+func (r *fakeRepository) SubmitHumanDecision(_ context.Context, params workflows.SubmitHumanDecisionParams) (workflows.HumanDecisionResult, bool, error) {
+	run, ok := r.byID[params.WorkflowRunID]
+	if !ok {
+		return workflows.HumanDecisionResult{}, false, workflows.ErrNotFound
+	}
+
+	key := params.WorkflowRunID + ":" + params.DecisionKey
+	if existing, ok := r.decisions[key]; ok {
+		if existing.Decision != params.Decision || existing.ActorID != params.ActorID || existing.Reason != params.Reason {
+			return workflows.HumanDecisionResult{}, false, workflows.ErrDecisionConflict
+		}
+		return workflows.HumanDecisionResult{Run: run, Decision: existing}, false, nil
+	}
+
+	if run.Status != workflows.StatusWaitingForHuman {
+		return workflows.HumanDecisionResult{}, false, workflows.ErrWorkflowNotWaiting
+	}
+
+	decision := workflows.HumanDecision{
+		ID:            params.ID,
+		WorkflowRunID: params.WorkflowRunID,
+		DecisionKey:   params.DecisionKey,
+		NodeName:      "await_human_approval",
+		Decision:      params.Decision,
+		ActorID:       params.ActorID,
+		Reason:        params.Reason,
+		Details:       json.RawMessage(`{}`),
+		CreatedAt:     time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC),
+	}
+	r.decisions[key] = decision
+
+	nextNodeName := ""
+	if params.Decision == "approved" {
+		nextNodeName = workflows.NextNodeAfterApproval(run.WorkflowName)
+		run.Status = workflows.StatusQueued
+	} else {
+		run.Status = workflows.StatusCanceled
+	}
+	r.byID[run.ID] = run
+
+	return workflows.HumanDecisionResult{
+		Run:          run,
+		Decision:     decision,
+		NextNodeName: nextNodeName,
+	}, true, nil
 }
 
 func (r *fakeRepository) Ping(context.Context) error {

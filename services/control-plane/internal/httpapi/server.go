@@ -185,6 +185,21 @@ func (s *Server) workflowRunByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasSuffix(suffix, "/decisions") {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		id := strings.TrimSuffix(suffix, "/decisions")
+		if id == "" || strings.Contains(id, "/") {
+			writeError(w, r, http.StatusNotFound, "not_found", "workflow run not found")
+			return
+		}
+		s.workflowRunDecision(w, r, id)
+		return
+	}
+
 	if strings.HasSuffix(suffix, "/audit") {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
@@ -235,6 +250,45 @@ func (s *Server) workflowRunAudit(w http.ResponseWriter, r *http.Request, id str
 	})
 }
 
+func (s *Server) workflowRunDecision(w http.ResponseWriter, r *http.Request, id string) {
+	decisionKey := r.Header.Get("Idempotency-Key")
+	if strings.TrimSpace(decisionKey) == "" {
+		writeError(w, r, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required")
+		return
+	}
+
+	var request submitHumanDecisionRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeError(w, r, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
+		return
+	}
+
+	result, created, err := s.workflows.SubmitHumanDecision(r.Context(), workflows.SubmitHumanDecisionRequest{
+		WorkflowRunID: id,
+		DecisionKey:   decisionKey,
+		Decision:      request.Decision,
+		ActorID:       request.ActorID,
+		Reason:        request.Reason,
+	})
+	if err != nil {
+		s.writeWorkflowError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, humanDecisionResponse{
+		WorkflowRun:  toWorkflowRunDTO(result.Run),
+		Decision:     toHumanDecisionDTO(result.Decision),
+		NextNodeName: result.NextNodeName,
+		Replayed:     !created,
+	})
+}
+
 func (s *Server) writeWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, workflows.ErrInvalidWorkflowName):
@@ -243,10 +297,18 @@ func (s *Server) writeWorkflowError(w http.ResponseWriter, r *http.Request, err 
 		writeError(w, r, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required")
 	case errors.Is(err, workflows.ErrInvalidInput):
 		writeError(w, r, http.StatusBadRequest, "invalid_input", "input must be a JSON object")
+	case errors.Is(err, workflows.ErrInvalidHumanDecision):
+		writeError(w, r, http.StatusBadRequest, "invalid_human_decision", "decision must be approved or rejected and actor_id is required")
 	case errors.Is(err, workflows.ErrMissingID), errors.Is(err, workflows.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not_found", "workflow run not found")
 	case errors.Is(err, workflows.ErrIdempotencyConflict):
 		writeError(w, r, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was used with a different request")
+	case errors.Is(err, workflows.ErrDecisionConflict):
+		writeError(w, r, http.StatusConflict, "decision_conflict", "Idempotency-Key was used with a different decision")
+	case errors.Is(err, workflows.ErrWorkflowNotWaiting):
+		writeError(w, r, http.StatusConflict, "workflow_not_waiting", "workflow run is not waiting for a human decision")
+	case errors.Is(err, workflows.ErrUnknownWorkflow):
+		writeError(w, r, http.StatusBadRequest, "unknown_workflow", "workflow_name is not supported")
 	default:
 		s.logger.Error("workflow request failed", "error", err, "correlation_id", correlationIDFromRequest(r))
 		writeError(w, r, http.StatusInternalServerError, "internal_error", "internal server error")
@@ -312,6 +374,9 @@ func routeLabel(path string) string {
 		return path
 	}
 	if strings.HasPrefix(path, "/v1/workflow-runs/") {
+		if strings.HasSuffix(path, "/decisions") {
+			return "/v1/workflow-runs/{id}/decisions"
+		}
 		if strings.HasSuffix(path, "/audit") {
 			return "/v1/workflow-runs/{id}/audit"
 		}
@@ -392,9 +457,22 @@ type createWorkflowRunRequest struct {
 	Input        json.RawMessage `json:"input"`
 }
 
+type submitHumanDecisionRequest struct {
+	Decision string `json:"decision"`
+	ActorID  string `json:"actor_id"`
+	Reason   string `json:"reason"`
+}
+
 type workflowRunResponse struct {
 	WorkflowRun workflowRunDTO `json:"workflow_run"`
 	Replayed    bool           `json:"replayed"`
+}
+
+type humanDecisionResponse struct {
+	WorkflowRun  workflowRunDTO   `json:"workflow_run"`
+	Decision     humanDecisionDTO `json:"decision"`
+	NextNodeName string           `json:"next_node_name,omitempty"`
+	Replayed     bool             `json:"replayed"`
 }
 
 type workflowRunDTO struct {
@@ -406,6 +484,18 @@ type workflowRunDTO struct {
 	TraceParent   string           `json:"traceparent"`
 	CreatedAt     time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
+}
+
+type humanDecisionDTO struct {
+	ID            string          `json:"id"`
+	WorkflowRunID string          `json:"workflow_run_id"`
+	DecisionKey   string          `json:"decision_key"`
+	NodeName      string          `json:"node_name"`
+	Decision      string          `json:"decision"`
+	ActorID       string          `json:"actor_id"`
+	Reason        string          `json:"reason"`
+	Details       json.RawMessage `json:"details"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 type auditRecordsResponse struct {
@@ -443,6 +533,20 @@ func toWorkflowRunDTO(run workflows.Run) workflowRunDTO {
 		TraceParent:   run.TraceParent,
 		CreatedAt:     run.CreatedAt,
 		UpdatedAt:     run.UpdatedAt,
+	}
+}
+
+func toHumanDecisionDTO(decision workflows.HumanDecision) humanDecisionDTO {
+	return humanDecisionDTO{
+		ID:            decision.ID,
+		WorkflowRunID: decision.WorkflowRunID,
+		DecisionKey:   decision.DecisionKey,
+		NodeName:      decision.NodeName,
+		Decision:      decision.Decision,
+		ActorID:       decision.ActorID,
+		Reason:        decision.Reason,
+		Details:       decision.Details,
+		CreatedAt:     decision.CreatedAt,
 	}
 }
 
