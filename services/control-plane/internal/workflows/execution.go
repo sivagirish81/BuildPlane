@@ -57,6 +57,7 @@ type QueueMessage struct {
 	NodeExecutionID string
 	WorkflowRunID   string
 	NodeName        string
+	WorkerPool      string
 }
 
 type Lease struct {
@@ -64,6 +65,7 @@ type Lease struct {
 	WorkflowRunID   string
 	WorkflowName    string
 	NodeName        string
+	WorkerPool      string
 	Input           json.RawMessage
 	WorkerID        string
 	Attempt         int

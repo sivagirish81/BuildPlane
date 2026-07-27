@@ -17,6 +17,8 @@ spec:
         app.kubernetes.io/name: buildplane-scheduler
         app.kubernetes.io/part-of: buildplane
     spec:
+      serviceAccountName: buildplane-scheduler
+      terminationGracePeriodSeconds: 20
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -36,11 +38,25 @@ spec:
                   name: buildplane-postgres
                   key: database-url
             - name: BUILDPLANE_REDIS_URL
-              value: redis://buildplane-redis:6379/0
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: redis-url
             - name: BUILDPLANE_MIGRATIONS_DIR
-              value: /migrations
-            - name: BUILDPLANE_AI_SERVICE_URL
-              value: http://buildplane-ai-service:8090
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
+            - name: BUILDPLANE_SCHEDULER_BATCH_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: scheduler-batch-size
+            - name: BUILDPLANE_SCHEDULER_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: scheduler-interval
           resources:
             requests:
               cpu: 25m
@@ -58,22 +74,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: buildplane-worker
+  name: buildplane-worker-general
   namespace: buildplane-system
   labels:
-    app.kubernetes.io/name: buildplane-worker
+    app.kubernetes.io/name: buildplane-worker-general
     app.kubernetes.io/part-of: buildplane
+    buildplane.io/worker-pool: general
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      app.kubernetes.io/name: buildplane-worker
+      app.kubernetes.io/name: buildplane-worker-general
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: buildplane-worker
+        app.kubernetes.io/name: buildplane-worker-general
         app.kubernetes.io/part-of: buildplane
+        buildplane.io/worker-pool: general
     spec:
+      serviceAccountName: buildplane-worker-general
+      terminationGracePeriodSeconds: 35
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -93,9 +113,27 @@ spec:
                   name: buildplane-postgres
                   key: database-url
             - name: BUILDPLANE_REDIS_URL
-              value: redis://buildplane-redis:6379/0
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: redis-url
             - name: BUILDPLANE_MIGRATIONS_DIR
-              value: /migrations
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
+            - name: BUILDPLANE_WORKER_POOL
+              value: general
+            - name: BUILDPLANE_WORKER_LEASE_DURATION
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-lease-duration
+            - name: BUILDPLANE_WORKER_DRAIN_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-drain-timeout
           resources:
             requests:
               cpu: 25m
@@ -103,6 +141,88 @@ spec:
             limits:
               cpu: 250m
               memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-worker-ai
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker-ai
+    app.kubernetes.io/part-of: buildplane
+    buildplane.io/worker-pool: ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-worker-ai
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-worker-ai
+        app.kubernetes.io/part-of: buildplane
+        buildplane.io/worker-pool: ai
+    spec:
+      serviceAccountName: buildplane-worker-ai
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: buildplane/control-plane:dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - /buildplane-worker
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: buildplane-postgres
+                  key: database-url
+            - name: BUILDPLANE_REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: redis-url
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
+            - name: BUILDPLANE_WORKER_POOL
+              value: ai
+            - name: BUILDPLANE_WORKER_LEASE_DURATION
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-lease-duration
+            - name: BUILDPLANE_WORKER_DRAIN_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-drain-timeout
+            - name: BUILDPLANE_AI_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: ai-service-url
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

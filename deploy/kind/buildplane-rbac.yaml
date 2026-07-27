@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: buildplane-control-plane
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-control-plane
+    app.kubernetes.io/part-of: buildplane
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: buildplane-scheduler
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-scheduler
+    app.kubernetes.io/part-of: buildplane
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: buildplane-worker-general
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker-general
+    app.kubernetes.io/part-of: buildplane
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: buildplane-worker-ai
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker-ai
+    app.kubernetes.io/part-of: buildplane
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: buildplane-ai-service
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-ai-service
+    app.kubernetes.io/part-of: buildplane
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: buildplane-no-kubernetes-api
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-no-kubernetes-api
+    app.kubernetes.io/part-of: buildplane
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: buildplane-control-plane-no-kubernetes-api
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-control-plane
+    app.kubernetes.io/part-of: buildplane
+subjects:
+  - kind: ServiceAccount
+    name: buildplane-control-plane
+    namespace: buildplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: buildplane-no-kubernetes-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: buildplane-scheduler-no-kubernetes-api
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-scheduler
+    app.kubernetes.io/part-of: buildplane
+subjects:
+  - kind: ServiceAccount
+    name: buildplane-scheduler
+    namespace: buildplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: buildplane-no-kubernetes-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: buildplane-worker-general-no-kubernetes-api
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker-general
+    app.kubernetes.io/part-of: buildplane
+subjects:
+  - kind: ServiceAccount
+    name: buildplane-worker-general
+    namespace: buildplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: buildplane-no-kubernetes-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: buildplane-worker-ai-no-kubernetes-api
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-worker-ai
+    app.kubernetes.io/part-of: buildplane
+subjects:
+  - kind: ServiceAccount
+    name: buildplane-worker-ai
+    namespace: buildplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: buildplane-no-kubernetes-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: buildplane-ai-service-no-kubernetes-api
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-ai-service
+    app.kubernetes.io/part-of: buildplane
+subjects:
+  - kind: ServiceAccount
+    name: buildplane-ai-service
+    namespace: buildplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: buildplane-no-kubernetes-api
+

@@ -31,6 +31,10 @@ func run(logger *slog.Logger) error {
 	if redisURL == "" {
 		return fmt.Errorf("BUILDPLANE_REDIS_URL is required")
 	}
+	workerPool := os.Getenv("BUILDPLANE_WORKER_POOL")
+	if workerPool == "" {
+		workerPool = workflows.WorkerPoolGeneral
+	}
 
 	workerID := os.Getenv("BUILDPLANE_WORKER_ID")
 	if workerID == "" {
@@ -38,7 +42,7 @@ func run(logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("read hostname for worker id: %w", err)
 		}
-		workerID = hostname
+		workerID = fmt.Sprintf("%s-%s", workerPool, hostname)
 	}
 
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
@@ -64,7 +68,7 @@ func run(logger *slog.Logger) error {
 	}
 	defer redisClient.Close()
 
-	redisQueue := queue.NewRedisQueue(redisClient)
+	redisQueue := queue.NewRedisQueueForPool(redisClient, workerPool)
 	if err := redisQueue.EnsureConsumerGroup(startupCtx); err != nil {
 		return err
 	}
@@ -72,6 +76,7 @@ func run(logger *slog.Logger) error {
 	repository := postgres.NewWorkflowRepository(db)
 	worker := workflows.NewWorker(repository, redisQueue, workerID)
 	worker.LeaseDuration = envDuration("BUILDPLANE_WORKER_LEASE_DURATION", 30*time.Second)
+	drainTimeout := envDuration("BUILDPLANE_WORKER_DRAIN_TIMEOUT", 25*time.Second)
 	aiServiceURL := os.Getenv("BUILDPLANE_AI_SERVICE_URL")
 	if aiServiceURL == "" {
 		aiServiceURL = "http://localhost:8090"
@@ -87,20 +92,29 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	logger.Info("starting worker", "worker_id", workerID, "lease_duration", worker.LeaseDuration.String(), "ai_service_url", aiServiceURL)
+	logger.Info(
+		"starting worker",
+		"worker_id", workerID,
+		"worker_pool", workerPool,
+		"lease_duration", worker.LeaseDuration.String(),
+		"drain_timeout", drainTimeout.String(),
+		"ai_service_url", aiServiceURL,
+	)
 	for {
-		processed, err := worker.RunOnce(ctx)
-		if err != nil {
-			logger.Error("worker iteration failed", "error", err, "worker_id", workerID)
-		} else if processed {
-			logger.Info("worker processed node execution", "worker_id", workerID)
-		}
-
 		select {
 		case <-ctx.Done():
-			logger.Info("shutting down worker", "worker_id", workerID)
+			logger.Info("shutting down worker", "worker_id", workerID, "worker_pool", workerPool)
 			return nil
 		default:
+		}
+
+		iterationCtx, cancelIteration := context.WithTimeout(context.Background(), drainTimeout)
+		processed, err := worker.RunOnce(iterationCtx)
+		cancelIteration()
+		if err != nil {
+			logger.Error("worker iteration failed", "error", err, "worker_id", workerID, "worker_pool", workerPool)
+		} else if processed {
+			logger.Info("worker processed node execution", "worker_id", workerID, "worker_pool", workerPool)
 		}
 	}
 }

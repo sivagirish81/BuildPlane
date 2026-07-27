@@ -218,3 +218,39 @@ kind load docker-image buildplane/ai-service:dev --name buildplane
 kubectl apply -f deploy/kind/buildplane-ai-service.yaml
 kubectl apply -f deploy/kind/buildplane-scheduler-worker.yaml
 ```
+
+## Phase 6: Kubernetes Worker Pools
+
+Phase 6 splits worker execution into separate Kubernetes worker pools:
+
+```text
+general -> validate_input, compose_summary
+ai      -> classify_issue
+```
+
+Apply the shared runtime config and explicit Kubernetes identities before the
+worker Deployments:
+
+```bash
+kubectl apply -f deploy/kind/buildplane-config.yaml
+kubectl apply -f deploy/kind/buildplane-rbac.yaml
+kubectl apply -f deploy/kind/buildplane-scheduler-worker.yaml
+```
+
+Inspect the pools:
+
+```bash
+kubectl get deploy -n buildplane-system \
+  -l app.kubernetes.io/part-of=buildplane
+
+kubectl describe deploy buildplane-worker-general -n buildplane-system
+kubectl describe deploy buildplane-worker-ai -n buildplane-system
+```
+
+Inspect the durable routing field:
+
+```bash
+docker compose -f deploy/docker/docker-compose.postgres.yaml exec postgres \
+  psql -U buildplane -d buildplane \
+  -c 'select node_name, worker_pool, status from node_executions order by created_at;'
+```

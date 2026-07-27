@@ -42,7 +42,7 @@ updated AS (
 		updated_at = now()
 	FROM candidates AS c
 	WHERE n.id = c.id
-	RETURNING n.id, n.workflow_run_id, n.node_name
+	RETURNING n.id, n.workflow_run_id, n.node_name, n.worker_pool
 ),
 audit AS (
 	INSERT INTO audit_records (workflow_run_id, node_execution_id, event_type, actor_type, actor_id, details)
@@ -52,7 +52,7 @@ audit AS (
 		'node_execution.queued',
 		'scheduler',
 		'buildplane-scheduler',
-		jsonb_build_object('node_name', node_name, 'status', 'queued')
+		jsonb_build_object('node_name', node_name, 'worker_pool', worker_pool, 'status', 'queued')
 	FROM updated
 ),
 events AS (
@@ -62,7 +62,8 @@ events AS (
 		jsonb_build_object(
 			'node_execution_id', id,
 			'workflow_run_id', workflow_run_id,
-			'node_name', node_name
+			'node_name', node_name,
+			'worker_pool', worker_pool
 		)
 	FROM updated
 	RETURNING id, topic, payload, status, attempts, published_at, last_error, created_at, updated_at
@@ -167,13 +168,14 @@ WHERE id = $1
 		status = 'queued'
 		OR (status = 'running' AND lease_expires_at < now())
 	)
-RETURNING id, workflow_run_id, node_name, attempt, lease_worker_id, lease_expires_at, fencing_token`
+RETURNING id, workflow_run_id, node_name, worker_pool, attempt, lease_worker_id, lease_expires_at, fencing_token`
 
 	var lease workflows.Lease
 	err = tx.QueryRowContext(ctx, query, nodeExecutionID, workerID, leaseDuration.Milliseconds()).Scan(
 		&lease.NodeExecutionID,
 		&lease.WorkflowRunID,
 		&lease.NodeName,
+		&lease.WorkerPool,
 		&lease.Attempt,
 		&lease.WorkerID,
 		&lease.LeaseExpiresAt,
@@ -207,6 +209,7 @@ WHERE id = $1
 		ActorID:         workerID,
 		Details: map[string]any{
 			"node_name":        lease.NodeName,
+			"worker_pool":      lease.WorkerPool,
 			"attempt":          lease.Attempt,
 			"fencing_token":    lease.FencingToken,
 			"lease_expires_at": lease.LeaseExpiresAt,
@@ -305,8 +308,9 @@ RETURNING workflow_run_id`
 			ActorType:       "worker",
 			ActorID:         workerID,
 			Details: map[string]any{
-				"node_name": nextNodeName,
-				"status":    string(workflows.NodeStatusPending),
+				"node_name":   nextNodeName,
+				"worker_pool": workflows.WorkerPoolForNode(nextNodeName),
+				"status":      string(workflows.NodeStatusPending),
 			},
 		}); err != nil {
 			return err
