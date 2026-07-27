@@ -286,3 +286,23 @@ flowchart LR
 The canary percentage is durable desired release state. It does not yet route
 live workflow traffic. The important behavior in this phase is the gate:
 evaluation must pass before canary, and canary must exist before promotion.
+
+## Current Phase 11 Runtime
+
+Phase 11 adds a browser-based operational console:
+
+```mermaid
+flowchart LR
+  Browser["React console"] --> Vite["Vite dev proxy /api"]
+  Vite --> API["Go control-plane API"]
+  API --> Runs["workflow_runs"]
+  API --> Audit["audit_records"]
+  API --> Versions["component_versions"]
+  Browser --> SSE["workflow run SSE snapshots"]
+  SSE --> API
+```
+
+The console reads workflow, audit, dependency, and release state through the API.
+Human approval and component release actions also go through the API, preserving
+the validation and audit boundary. The browser does not talk directly to
+PostgreSQL, Redis, worker processes, or Kubernetes.

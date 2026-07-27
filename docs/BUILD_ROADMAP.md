@@ -241,15 +241,18 @@ Learning focus:
 
 ## Phase 11: Frontend Operational UX
 
+Status: Complete
+
 Goal: Add a React and TypeScript UI for observing and operating workflows.
 
-Planned behavior:
+Implemented behavior:
 
 - Workflow list and detail views
-- Live updates via SSE or WebSockets
+- Live updates via SSE
 - Audit timeline
 - Human approval UI
-- Component dependency graph
+- Component dependency and release views
+- Frontend CI checks for typecheck, tests, and production build
 
 Learning focus:
 

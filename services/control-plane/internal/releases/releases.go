@@ -128,6 +128,7 @@ type RollbackRequest struct {
 type Repository interface {
 	CreateComponentVersion(ctx context.Context, params CreateComponentVersionParams) (ComponentVersion, error)
 	GetComponentVersion(ctx context.Context, id string) (ComponentVersion, error)
+	ListComponentVersions(ctx context.Context, componentName string, limit int) ([]ComponentVersion, error)
 	LatestPromotedComponentVersion(ctx context.Context, componentName string) (ComponentVersion, error)
 	RecordEvaluation(ctx context.Context, params RecordEvaluationParams) (EvaluationRun, error)
 	StartCanary(ctx context.Context, id string, percent int) (ComponentVersion, error)
@@ -182,6 +183,17 @@ func (s *Service) GetComponentVersion(ctx context.Context, id string) (Component
 		return ComponentVersion{}, ErrComponentVersionNotFound
 	}
 	return s.repository.GetComponentVersion(ctx, id)
+}
+
+func (s *Service) ListComponentVersions(ctx context.Context, componentName string, limit int) ([]ComponentVersion, error) {
+	componentName = strings.TrimSpace(componentName)
+	if !isKnownComponent(componentName) {
+		return nil, ErrUnknownComponent
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	return s.repository.ListComponentVersions(ctx, componentName, limit)
 }
 
 func (s *Service) AffectedWorkflows(componentName string) ([]workflows.ComponentDependency, error) {

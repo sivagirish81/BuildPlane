@@ -4,34 +4,28 @@ Last updated: 2026-07-27
 
 ## Current Phase
 
-Phase 10: Evaluation, Canary, and Promotion
+Phase 11: Frontend Operational UX
 
 Status: Complete
 
 ## Completed Items
 
-- Added a release/evaluation domain package in
-  `services/control-plane/internal/releases`.
-- Added deterministic synthetic evaluation for the reusable
-  `issue_classifier` component.
-- Added static affected-workflow detection for workflows that use
-  `classify_issue`.
-- Added migration `migrations/0007_component_evaluation_release_gates.sql`.
-- Added `component_versions`, `component_evaluation_runs`,
-  `component_evaluation_results`, and `component_release_events`.
-- Seeded promoted baseline `issue_classifier@v1`.
-- Added release API endpoints for creating candidate versions, running
-  evaluation, starting canary, promoting, rolling back, and listing affected
-  workflows.
-- Added release gates:
-  evaluation must pass before canary, and canary must exist before promotion.
-- Added transactional promotion and rollback in PostgreSQL.
-- Added synthetic candidate request payload at
-  `examples/component-versions/issue-classifier-v2.json`.
-- Added ADR 0010 for component evaluation, canary, and promotion.
-- Added the Phase 10 learning artifact at
-  `docs/learning/phase-10-evaluation-canary-promotion.md`.
-- Updated README, roadmap, and architecture docs for Phase 10.
+- Added a Vite, React, and TypeScript operations console under `web/`.
+- Added workflow list/detail views, synthetic demo run actions, audit timeline
+  rendering, and human approval/rejection controls.
+- Added component release views for `issue_classifier`, including dependency
+  visibility, component version history, candidate creation, evaluation,
+  canary, promotion, and rollback actions.
+- Added `GET /v1/workflow-runs` for recent workflow runs.
+- Added `GET /v1/workflow-runs/{id}/events` for workflow SSE snapshots.
+- Added `GET /v1/component-versions?component_name=...` for recent component
+  version state.
+- Added frontend typecheck, unit test, and production build commands.
+- Added frontend CI checks to the existing pull-request and `main` workflow.
+- Added ADR 0011 for the frontend operational console.
+- Added the Phase 11 learning artifact at
+  `docs/learning/phase-11-frontend-operational-ux.md`.
+- Updated README, roadmap, and architecture docs for Phase 11.
 
 ## Remaining Limitations
 
@@ -47,7 +41,7 @@ Status: Complete
   OpenTelemetry SDK, collector, spans, exemplars, alert rules, or persistent
   metrics storage.
 - Human approval is intentionally narrow: no role authorization, assignment
-  queue, SLA timer, comment thread, UI, or notification model exists yet.
+  queue, SLA timer, comment thread, or notification model exists yet.
 - Guarded external actions are mock-only and do not call invoice, freight,
   ticketing, payment, or carrier systems.
 - Component versions are durable, but workflow execution still uses the
@@ -55,6 +49,11 @@ Status: Complete
   component version is deferred.
 - Canary percentage is stored as desired release state. It does not yet split
   live workflow traffic or prove production canary health.
+- The frontend is a local operational console. It does not yet include auth,
+  tenant isolation, server-side sessions, role-aware action guards, persisted UI
+  preferences, or deployment manifests.
+- SSE streams workflow snapshots only. It does not yet provide a global event
+  stream, notification fanout, or durable event replay cursor.
 - The synthetic evaluation dataset is intentionally tiny and should be expanded
   before any real release confidence claims.
 - The AI service currently has one classifier endpoint. It does not yet expose
@@ -76,8 +75,8 @@ Status: Complete
 - The full BuildPlane vision is large. The roadmap intentionally starts with a
   tiny Kubernetes workload to prevent premature architecture.
 - Kubernetes concepts can feel abstract until inspected live. After Docker is
-  running, Phases 1 through 10 should be exercised manually in a real local
-  `kind` cluster using the documented commands.
+  running, Phases 1 through 11 should be exercised manually in a real local
+  `kind` cluster or local Compose stack using the documented commands.
 - The migration runner is intentionally small. It should be revisited before
   complex schema evolution, rollbacks, checksums, or multi-instance migration
   locking are needed.
@@ -89,11 +88,9 @@ Status: Complete
 
 ## Next Phase
 
-Phase 11: Frontend Operational UX
-
-The next phase should add a React and TypeScript UI for observing and operating
-workflows, including workflow list/detail views, audit timelines, human
-approval UI, and component dependency/release views.
+No later phase is defined in the current roadmap. The next continuation should
+extend `docs/BUILD_ROADMAP.md` with the next learning phase before
+implementation continues.
 
 ## Test Evidence
 
@@ -101,34 +98,26 @@ Commands executed:
 
 ```bash
 .cache/ai-service-venv/bin/python -m pytest ai-service/tests
-gofmt -w services/control-plane/internal/releases/releases.go services/control-plane/internal/releases/evaluation.go services/control-plane/internal/releases/releases_test.go services/control-plane/internal/workflows/definitions.go services/control-plane/internal/postgres/component_repository.go services/control-plane/internal/httpapi/server.go services/control-plane/internal/httpapi/component_routes.go services/control-plane/cmd/buildplane-control-plane/main.go
-gofmt -w services/operator/api/v1alpha1/groupversion_info.go services/operator/api/v1alpha1/buildplaneruntime_types.go services/operator/cmd/buildplane-operator/main.go services/operator/internal/controller/buildplaneruntime_controller.go services/operator/internal/controller/buildplaneruntime_controller_test.go
-env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go test ./services/control-plane/...
-env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go test ./services/operator/...
-env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go build -o .cache/bin/buildplane-control-plane ./services/control-plane/cmd/buildplane-control-plane
-env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go build -o .cache/bin/buildplane-scheduler ./services/control-plane/cmd/buildplane-scheduler
-env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go build -o .cache/bin/buildplane-worker ./services/control-plane/cmd/buildplane-worker
-env GOCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-build GOMODCACHE=/Users/sivagirish/Documents/Work/Project/BuildPlane/.cache/go-mod go build -o .cache/bin/buildplane-operator ./services/operator/cmd/buildplane-operator
-docker compose -f deploy/docker/docker-compose.postgres.yaml config
-docker compose -f deploy/docker/docker-compose.postgres.yaml up -d
-docker build -f deploy/docker/ai-service.Dockerfile -t buildplane/ai-service:dev .
-docker build -f deploy/docker/control-plane.Dockerfile -t buildplane/control-plane:dev .
-docker build -f deploy/docker/operator.Dockerfile -t buildplane/operator:dev .
-curl -i http://localhost:8080/readyz
-curl -i -X POST http://localhost:8080/v1/component-versions -H 'Content-Type: application/json' --data @examples/component-versions/issue-classifier-v2.json
-curl -i http://localhost:8080/v1/components/issue_classifier/affected-workflows
-curl -i -X POST http://localhost:8080/v1/component-versions/<component-version-id>/evaluations
-curl -i -X POST http://localhost:8080/v1/component-versions/<component-version-id>/canary -H 'Content-Type: application/json' -d '{"percent":10}'
-curl -i -X POST http://localhost:8080/v1/component-versions/<component-version-id>/promote
-curl -i -X POST http://localhost:8080/v1/components/issue_classifier/rollback -H 'Content-Type: application/json' -d '{"actor_id":"operator-1","reason":"Synthetic rollback smoke test"}'
-docker compose -f deploy/docker/docker-compose.postgres.yaml exec postgres psql -U buildplane -d buildplane -c 'select component_name, version, status, canary_percent, evaluation_passed, previous_promoted_version_id from component_versions order by created_at;'
+gofmt -w services/control-plane/internal/httpapi/server.go services/control-plane/internal/httpapi/component_routes.go services/control-plane/internal/httpapi/server_test.go services/control-plane/internal/workflows/workflows_test.go services/control-plane/internal/releases/releases_test.go services/control-plane/internal/workflows/workflows.go services/control-plane/internal/releases/releases.go services/control-plane/internal/postgres/workflow_repository.go services/control-plane/internal/postgres/component_repository.go
+go test ./services/control-plane/...
+go test ./services/operator/...
+npm install
+npm audit --omit=optional
+npm ci
+npm run typecheck
+npm test
+npm run build
+docker compose -f deploy/docker/docker-compose.postgres.yaml up -d --build control-plane
+curl -s http://localhost:8080/readyz
+curl -s 'http://localhost:8080/v1/workflow-runs?limit=5'
+curl -s -X POST http://localhost:8080/v1/workflow-runs -H 'Content-Type: application/json' -H 'Idempotency-Key: phase11-smoke-001' -d '{"workflow_name":"demo.invoice-exception","input":{"case_id":"synthetic-inv-case-001","title":"Invoice price mismatch","description":"Synthetic invoice total is higher than purchase order","customer_message":"Please review this invoice before payment","source":"phase11-smoke","invoice_id":"synthetic-inv-001","vendor_name":"Synthetic Vendor","amount_disputed":1250.50}}'
+curl -s http://localhost:8080/v1/workflow-runs/71d86097-35d8-4ca3-8c05-fa53a4339080/audit
+curl -sN --max-time 1 http://localhost:8080/v1/workflow-runs/71d86097-35d8-4ca3-8c05-fa53a4339080/events
+curl -s 'http://localhost:8080/v1/component-versions?component_name=issue_classifier&limit=5'
+curl -s http://localhost:8080/v1/components/issue_classifier/affected-workflows
 ruby -e 'require "yaml"; %w[deploy/kind/buildplane-control-plane.yaml deploy/kind/buildplane-config.yaml deploy/kind/buildplane-rbac.yaml deploy/kind/buildplane-redis.yaml deploy/kind/buildplane-scheduler-worker.yaml deploy/kind/buildplane-ai-service.yaml deploy/kind/buildplane-runtime-crd.yaml deploy/kind/buildplane-operator.yaml deploy/kind/buildplane-runtime-sample.yaml deploy/kind/buildplane-observability.yaml].each { |path| docs = YAML.load_stream(File.read(path)); puts "#{path}: #{docs.map { |d| d.fetch("kind") }.join(",")}" }'
-ruby -e 'sql = File.read("migrations/0004_worker_pools.sql"); %w[worker_pool classify_issue node_executions_worker_pool_check idx_node_executions_schedulable_pool].each { |needle| abort "missing #{needle}" unless sql.include?(needle) }; puts "migration contains worker_pool routing metadata"'
-ruby -e 'sql = File.read("migrations/0005_workflow_traceparent.sql"); abort "missing traceparent" unless sql.include?("traceparent"); puts "migration contains workflow traceparent metadata"'
-ruby -e 'sql = File.read("migrations/0006_human_decisions_and_demo_workflows.sql"); %w[waiting_for_human human_decisions approved rejected].each { |needle| abort "missing #{needle}" unless sql.include?(needle) }; puts "migration contains human decision metadata"'
 ruby -e 'sql = File.read("migrations/0007_component_evaluation_release_gates.sql"); %w[component_versions component_evaluation_runs component_release_events issue_classifier promoted].each { |needle| abort "missing #{needle}" unless sql.include?(needle) }; puts "migration contains component release metadata"'
-ruby -e 'require "json"; JSON.parse(File.read("examples/component-versions/issue-classifier-v2.json")); puts "component version example json parses"'
-if grep -R --exclude=BUILD_STATUS.md '"workflow_name":"invoice-exception-demo"\|"workflow_name":"phase3-demo"' -n README.md docs services examples; then exit 1; else echo "no unsupported placeholder workflow names"; fi
+ruby -e 'require "json"; JSON.parse(File.read("deploy/grafana/buildplane-overview.json")); JSON.parse(File.read("examples/component-versions/issue-classifier-v2.json")); JSON.parse(File.read("examples/demo-workflows/invoice-exception.json")); JSON.parse(File.read("examples/demo-workflows/freight-exception.json"))'
 git diff --check
 ```
 
@@ -136,28 +125,27 @@ Results:
 
 - Python AI service tests passed.
 - Go formatting completed.
-- Go unit tests passed for control-plane and operator modules.
-- Go binary builds passed for API, scheduler, worker, and operator using a
-  repo-local Go build cache.
-- Docker Compose config validation passed.
-- Docker image builds passed for control-plane, AI service, and operator after
-  elevated Docker socket access was granted.
-- Local Docker Compose stack started successfully after elevated Docker socket
-  access was granted.
-- Live Phase 10 smoke test passed: candidate creation, affected workflow
-  detection, evaluation, canary, promotion, rollback, and direct PostgreSQL
-  state inspection.
+- Go unit tests passed for control-plane and operator modules after the new
+  repository methods and HTTP routes were added.
+- Frontend dependency installation passed with `npm install` and `npm ci`.
+- `npm audit --omit=optional` passed with zero known vulnerabilities after
+  upgrading the Vite/Vitest toolchain.
+- Frontend typecheck, Vitest unit tests, and production build passed.
+- Control-plane Docker image rebuilt and the local Compose control-plane
+  container restarted successfully.
+- Live API smoke tests passed for readiness, workflow list, workflow creation,
+  audit records, workflow SSE snapshots, component version list, and affected
+  workflow detection.
 - Offline YAML parsing passed for control-plane, config, RBAC, Redis,
   scheduler, worker pools, AI service, CRD, operator, runtime sample, and
   observability manifests.
-- Offline migration check passed for `worker_pool` routing metadata.
-- Offline migration check passed for workflow `traceparent` metadata.
-- Offline migration check passed for human decision metadata.
 - Offline migration check passed for component release metadata.
-- Component version example JSON parsed.
-- Copy-paste docs check found no unsupported placeholder workflow names.
+- Grafana dashboard and example JSON files parsed.
 - `git diff --check` passed.
+- Starting the Vite dev server from Codex was blocked because the required
+  localhost bind escalation hit the current approval usage limit. The app still
+  builds successfully and can be run locally with `cd web && npm run dev`.
 
 ## Proposed Commit Message
 
-`feat: add component evaluation release gates`
+`feat: add frontend operations console`

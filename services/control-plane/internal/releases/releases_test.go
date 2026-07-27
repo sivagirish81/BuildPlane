@@ -112,6 +112,21 @@ func TestAffectedWorkflows(t *testing.T) {
 	}
 }
 
+func TestListComponentVersions(t *testing.T) {
+	service := NewService(newFakeRepository())
+
+	versions, err := service.ListComponentVersions(context.Background(), IssueClassifierComponent, 25)
+	if err != nil {
+		t.Fatalf("list component versions: %v", err)
+	}
+	if len(versions) != 1 {
+		t.Fatalf("expected one component version, got %d", len(versions))
+	}
+	if versions[0].ID != "issue-classifier-v1" {
+		t.Fatalf("expected issue-classifier-v1, got %q", versions[0].ID)
+	}
+}
+
 func passingSpec() json.RawMessage {
 	return json.RawMessage(`{
 		"rules": [
@@ -171,6 +186,16 @@ func (r *fakeRepository) GetComponentVersion(_ context.Context, id string) (Comp
 		return ComponentVersion{}, ErrComponentVersionNotFound
 	}
 	return version, nil
+}
+
+func (r *fakeRepository) ListComponentVersions(_ context.Context, componentName string, _ int) ([]ComponentVersion, error) {
+	var versions []ComponentVersion
+	for _, version := range r.versions {
+		if version.ComponentName == componentName {
+			versions = append(versions, version)
+		}
+	}
+	return versions, nil
 }
 
 func (r *fakeRepository) LatestPromotedComponentVersion(_ context.Context, componentName string) (ComponentVersion, error) {

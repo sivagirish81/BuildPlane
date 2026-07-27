@@ -58,6 +58,37 @@ WHERE id = $1`
 	return version, nil
 }
 
+func (r *WorkflowRepository) ListComponentVersions(ctx context.Context, componentName string, limit int) ([]releases.ComponentVersion, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	const query = `
+SELECT id, component_name, version, prompt_version, spec, status, change_summary, created_by, canary_percent, evaluation_passed, previous_promoted_version_id, created_at, updated_at
+FROM component_versions
+WHERE component_name = $1
+ORDER BY updated_at DESC, created_at DESC
+LIMIT $2`
+
+	rows, err := r.db.QueryContext(ctx, query, componentName, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list component versions: %w", err)
+	}
+	defer rows.Close()
+
+	var versions []releases.ComponentVersion
+	for rows.Next() {
+		version, err := scanComponentVersion(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan component version: %w", err)
+		}
+		versions = append(versions, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan component versions: %w", err)
+	}
+	return versions, nil
+}
+
 func (r *WorkflowRepository) LatestPromotedComponentVersion(ctx context.Context, componentName string) (releases.ComponentVersion, error) {
 	const query = `
 SELECT id, component_name, version, prompt_version, spec, status, change_summary, created_by, canary_percent, evaluation_passed, previous_promoted_version_id, created_at, updated_at

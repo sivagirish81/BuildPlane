@@ -17,8 +17,12 @@ func (s *Server) componentVersions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "route not found")
 		return
 	}
+	if r.Method == http.MethodGet {
+		s.componentVersionList(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		w.Header().Set("Allow", "GET, POST")
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
@@ -48,6 +52,27 @@ func (s *Server) componentVersions(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusCreated, componentVersionResponse{
 		ComponentVersion: toComponentVersionDTO(version),
+	})
+}
+
+func (s *Server) componentVersionList(w http.ResponseWriter, r *http.Request) {
+	if s.releases == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "release service is not configured")
+		return
+	}
+
+	versions, err := s.releases.ListComponentVersions(
+		r.Context(),
+		strings.TrimSpace(r.URL.Query().Get("component_name")),
+		queryLimit(r, 25),
+	)
+	if err != nil {
+		s.writeReleaseError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, componentVersionListResponse{
+		ComponentVersions: toComponentVersionDTOs(versions),
 	})
 }
 
@@ -263,6 +288,10 @@ type componentVersionResponse struct {
 	ComponentVersion componentVersionDTO `json:"component_version"`
 }
 
+type componentVersionListResponse struct {
+	ComponentVersions []componentVersionDTO `json:"component_versions"`
+}
+
 type evaluationRunResponse struct {
 	EvaluationRun evaluationRunDTO `json:"evaluation_run"`
 }
@@ -329,6 +358,14 @@ func toComponentVersionDTO(version releases.ComponentVersion) componentVersionDT
 		CreatedAt:                 version.CreatedAt,
 		UpdatedAt:                 version.UpdatedAt,
 	}
+}
+
+func toComponentVersionDTOs(versions []releases.ComponentVersion) []componentVersionDTO {
+	dtos := make([]componentVersionDTO, 0, len(versions))
+	for _, version := range versions {
+		dtos = append(dtos, toComponentVersionDTO(version))
+	}
+	return dtos
 }
 
 func toEvaluationRunDTO(run releases.EvaluationRun) evaluationRunDTO {

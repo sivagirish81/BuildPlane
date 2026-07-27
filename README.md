@@ -211,6 +211,29 @@ validate_input -> compose_summary
 
 Each meaningful transition is also recorded in `audit_records`.
 
+## Phase 11: Frontend Operational UX
+
+Phase 11 adds a React and TypeScript operations console.
+
+Start the API stack:
+
+```bash
+docker compose -f deploy/docker/docker-compose.postgres.yaml up -d
+```
+
+Run the frontend:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+The Vite dev server proxies `/api` to `http://localhost:8080`. Open the local
+URL printed by Vite and use the console to create demo workflow runs, inspect
+audit timelines, submit human decisions, and operate the synthetic
+`issue_classifier` release flow.
+
 ## Phase 5: Python AI Service
 
 Phase 5 inserts a bounded AI classification node into the local workflow:

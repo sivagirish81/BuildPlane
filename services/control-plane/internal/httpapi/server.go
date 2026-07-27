@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,8 +121,12 @@ func (s *Server) workflowRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "route not found")
 		return
 	}
+	if r.Method == http.MethodGet {
+		s.workflowRunList(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		w.Header().Set("Allow", "GET, POST")
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
@@ -180,6 +186,23 @@ func (s *Server) workflowRuns(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) workflowRunList(w http.ResponseWriter, r *http.Request) {
+	if s.workflows == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "workflow service is not configured")
+		return
+	}
+
+	runs, err := s.workflows.ListRuns(r.Context(), queryLimit(r, 50))
+	if err != nil {
+		s.writeWorkflowError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, workflowRunListResponse{
+		WorkflowRuns: toWorkflowRunDTOs(runs),
+	})
+}
+
 func (s *Server) workflowRunByID(w http.ResponseWriter, r *http.Request) {
 	if s.workflows == nil {
 		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "workflow service is not configured")
@@ -204,6 +227,21 @@ func (s *Server) workflowRunByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.workflowRunDecision(w, r, id)
+		return
+	}
+
+	if strings.HasSuffix(suffix, "/events") {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		id := strings.TrimSuffix(suffix, "/events")
+		if id == "" || strings.Contains(id, "/") {
+			writeError(w, r, http.StatusNotFound, "not_found", "workflow run not found")
+			return
+		}
+		s.workflowRunEvents(w, r, id)
 		return
 	}
 
@@ -243,6 +281,60 @@ func (s *Server) workflowRunByID(w http.ResponseWriter, r *http.Request) {
 		WorkflowRun: toWorkflowRunDTO(run),
 		Replayed:    false,
 	})
+}
+
+func (s *Server) workflowRunEvents(w http.ResponseWriter, r *http.Request, id string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, r, http.StatusInternalServerError, "streaming_unavailable", "streaming is not available")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	send := func() bool {
+		run, err := s.workflows.GetRun(r.Context(), id)
+		if err != nil {
+			s.writeWorkflowError(w, r, err)
+			return false
+		}
+		records, err := s.workflows.ListAuditRecords(r.Context(), id)
+		if err != nil {
+			s.writeWorkflowError(w, r, err)
+			return false
+		}
+		payload, err := json.Marshal(workflowRunEventDTO{
+			WorkflowRun:  toWorkflowRunDTO(run),
+			AuditRecords: toAuditRecordDTOs(records),
+			SentAt:       time.Now().UTC(),
+		})
+		if err != nil {
+			s.logger.Error("encode workflow run event", "error", err, "correlation_id", correlationIDFromRequest(r))
+			return false
+		}
+		_, _ = fmt.Fprintf(w, "event: workflow_run\ndata: %s\n\n", payload)
+		flusher.Flush()
+		return true
+	}
+
+	if !send() {
+		return
+	}
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			if !send() {
+				return
+			}
+		}
+	}
 }
 
 func (s *Server) workflowRunAudit(w http.ResponseWriter, r *http.Request, id string) {
@@ -384,6 +476,9 @@ func routeLabel(path string) string {
 		if strings.HasSuffix(path, "/decisions") {
 			return "/v1/workflow-runs/{id}/decisions"
 		}
+		if strings.HasSuffix(path, "/events") {
+			return "/v1/workflow-runs/{id}/events"
+		}
 		if strings.HasSuffix(path, "/audit") {
 			return "/v1/workflow-runs/{id}/audit"
 		}
@@ -447,6 +542,14 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code string,
 	})
 }
 
+func queryLimit(r *http.Request, fallback int) int {
+	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil || limit <= 0 {
+		return fallback
+	}
+	return limit
+}
+
 func correlationIDFromRequest(r *http.Request) string {
 	if value, ok := r.Context().Value(correlationIDKey{}).(string); ok {
 		return value
@@ -483,6 +586,12 @@ func (r *statusRecorder) WriteHeader(status int) {
 	r.ResponseWriter.WriteHeader(status)
 }
 
+func (r *statusRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 type createWorkflowRunRequest struct {
 	WorkflowName string          `json:"workflow_name"`
 	Input        json.RawMessage `json:"input"`
@@ -497,6 +606,16 @@ type submitHumanDecisionRequest struct {
 type workflowRunResponse struct {
 	WorkflowRun workflowRunDTO `json:"workflow_run"`
 	Replayed    bool           `json:"replayed"`
+}
+
+type workflowRunListResponse struct {
+	WorkflowRuns []workflowRunDTO `json:"workflow_runs"`
+}
+
+type workflowRunEventDTO struct {
+	WorkflowRun  workflowRunDTO   `json:"workflow_run"`
+	AuditRecords []auditRecordDTO `json:"audit_records"`
+	SentAt       time.Time        `json:"sent_at"`
 }
 
 type humanDecisionResponse struct {
@@ -565,6 +684,14 @@ func toWorkflowRunDTO(run workflows.Run) workflowRunDTO {
 		CreatedAt:     run.CreatedAt,
 		UpdatedAt:     run.UpdatedAt,
 	}
+}
+
+func toWorkflowRunDTOs(runs []workflows.Run) []workflowRunDTO {
+	dtos := make([]workflowRunDTO, 0, len(runs))
+	for _, run := range runs {
+		dtos = append(dtos, toWorkflowRunDTO(run))
+	}
+	return dtos
 }
 
 func toHumanDecisionDTO(decision workflows.HumanDecision) humanDecisionDTO {
