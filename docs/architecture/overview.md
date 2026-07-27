@@ -124,3 +124,24 @@ created request -> queued workflow_run
 
 Redis, workers, node state machines, and outbox publication begin in later
 phases.
+
+## Current Phase 3 Runtime
+
+Phase 3 introduces the first scheduler and worker loop:
+
+```mermaid
+flowchart LR
+  API["API creates workflow run"] --> PG["PostgreSQL"]
+  PG --> Node["pending node_execution"]
+  Scheduler["buildplane-scheduler"] --> Claim["claim node in PostgreSQL"]
+  Claim --> Outbox["outbox_events"]
+  Scheduler --> Redis["Redis Stream"]
+  Worker["buildplane-worker"] --> Redis
+  Worker --> Lease["DB lease + fencing token"]
+  Worker --> Done["idempotent completion"]
+  Done --> PG
+```
+
+Redis is not authoritative. A Redis message tells a worker what to try; the
+PostgreSQL lease decides whether the worker is allowed to run or complete the
+task.
