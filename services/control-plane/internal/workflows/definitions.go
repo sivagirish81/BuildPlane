@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,12 +25,17 @@ type NodeDefinition struct {
 	Run         NodeRunner
 }
 
-type NodeRunner func(input NodeInput) (NodeOutput, error)
+type NodeRunner func(ctx context.Context, input NodeInput, dependencies NodeDependencies) (NodeOutput, error)
+
+type NodeDependencies struct {
+	AIClassifier AIClassifier
+}
 
 type NodeInput struct {
-	WorkflowName string
-	NodeName     string
-	Input        json.RawMessage
+	WorkflowRunID string
+	WorkflowName  string
+	NodeName      string
+	Input         json.RawMessage
 }
 
 type NodeOutput struct {
@@ -55,6 +61,11 @@ func DefinitionFor(workflowName string) (WorkflowDefinition, bool) {
 				Run:         validateInput,
 			},
 			{
+				Name:        "classify_issue",
+				MaxAttempts: 2,
+				Run:         classifyIssue,
+			},
+			{
 				Name:        "compose_summary",
 				MaxAttempts: 2,
 				Run:         composeSummary,
@@ -68,7 +79,7 @@ func DefinitionFor(workflowName string) (WorkflowDefinition, bool) {
 	return definition, true
 }
 
-func ExecuteNode(input NodeInput) (NodeOutput, int, error) {
+func ExecuteNode(ctx context.Context, input NodeInput, dependencies NodeDependencies) (NodeOutput, int, error) {
 	definition, ok := DefinitionFor(input.WorkflowName)
 	if !ok {
 		return NodeOutput{}, 1, fmt.Errorf("%w: %s", ErrUnknownWorkflow, input.WorkflowName)
@@ -79,7 +90,7 @@ func ExecuteNode(input NodeInput) (NodeOutput, int, error) {
 			continue
 		}
 
-		output, err := node.Run(input)
+		output, err := node.Run(ctx, input, dependencies)
 		if output.NextNodeName == "" && index+1 < len(definition.Nodes) {
 			output.NextNodeName = definition.Nodes[index+1].Name
 		}
@@ -89,11 +100,9 @@ func ExecuteNode(input NodeInput) (NodeOutput, int, error) {
 	return NodeOutput{}, 1, fmt.Errorf("%w: %s", ErrUnknownNode, input.NodeName)
 }
 
-func validateInput(input NodeInput) (NodeOutput, error) {
-	var payload struct {
-		CaseID string `json:"case_id"`
-	}
-	if err := json.Unmarshal(input.Input, &payload); err != nil {
+func validateInput(_ context.Context, input NodeInput, _ NodeDependencies) (NodeOutput, error) {
+	payload, err := decodeLocalWorkflowInput(input.Input)
+	if err != nil {
 		return NodeOutput{}, fmt.Errorf("decode local workflow input: %w", err)
 	}
 	if payload.CaseID == "" {
@@ -113,11 +122,41 @@ func validateInput(input NodeInput) (NodeOutput, error) {
 	}, nil
 }
 
-func composeSummary(input NodeInput) (NodeOutput, error) {
-	var payload struct {
-		CaseID string `json:"case_id"`
+func classifyIssue(ctx context.Context, input NodeInput, dependencies NodeDependencies) (NodeOutput, error) {
+	if dependencies.AIClassifier == nil {
+		return NodeOutput{}, errors.New("AI classifier dependency is required")
 	}
-	if err := json.Unmarshal(input.Input, &payload); err != nil {
+
+	payload, err := decodeLocalWorkflowInput(input.Input)
+	if err != nil {
+		return NodeOutput{}, fmt.Errorf("decode local workflow input: %w", err)
+	}
+	if payload.CaseID == "" {
+		return NodeOutput{}, errors.New("case_id is required")
+	}
+
+	result, err := dependencies.AIClassifier.ClassifyIssue(ctx, IssueClassificationRequest{
+		WorkflowRunID:   input.WorkflowRunID,
+		NodeName:        input.NodeName,
+		CaseID:          payload.CaseID,
+		Title:           payload.Title,
+		Description:     payload.Description,
+		CustomerMessage: payload.CustomerMessage,
+		Source:          payload.Source,
+		Input:           input.Input,
+	})
+	if err != nil {
+		return NodeOutput{}, err
+	}
+
+	return NodeOutput{
+		Result: result,
+	}, nil
+}
+
+func composeSummary(_ context.Context, input NodeInput, _ NodeDependencies) (NodeOutput, error) {
+	payload, err := decodeLocalWorkflowInput(input.Input)
+	if err != nil {
 		return NodeOutput{}, fmt.Errorf("decode local workflow input: %w", err)
 	}
 	if payload.CaseID == "" {
@@ -135,6 +174,22 @@ func composeSummary(input NodeInput) (NodeOutput, error) {
 	return NodeOutput{
 		Result: json.RawMessage(result),
 	}, nil
+}
+
+type localWorkflowInput struct {
+	CaseID          string `json:"case_id"`
+	Title           string `json:"title"`
+	Description     string `json:"description"`
+	CustomerMessage string `json:"customer_message"`
+	Source          string `json:"source"`
+}
+
+func decodeLocalWorkflowInput(input json.RawMessage) (localWorkflowInput, error) {
+	var payload localWorkflowInput
+	if err := json.Unmarshal(input, &payload); err != nil {
+		return localWorkflowInput{}, err
+	}
+	return payload, nil
 }
 
 func maxAttempts(value int) int {

@@ -72,11 +72,22 @@ func run(logger *slog.Logger) error {
 	repository := postgres.NewWorkflowRepository(db)
 	worker := workflows.NewWorker(repository, redisQueue, workerID)
 	worker.LeaseDuration = envDuration("BUILDPLANE_WORKER_LEASE_DURATION", 30*time.Second)
+	aiServiceURL := os.Getenv("BUILDPLANE_AI_SERVICE_URL")
+	if aiServiceURL == "" {
+		aiServiceURL = "http://localhost:8090"
+	}
+	aiClient, err := workflows.NewHTTPAIClient(aiServiceURL, envDuration("BUILDPLANE_AI_SERVICE_TIMEOUT", 5*time.Second))
+	if err != nil {
+		return err
+	}
+	worker.Dependencies = workflows.NodeDependencies{
+		AIClassifier: aiClient,
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	logger.Info("starting worker", "worker_id", workerID, "lease_duration", worker.LeaseDuration.String())
+	logger.Info("starting worker", "worker_id", workerID, "lease_duration", worker.LeaseDuration.String(), "ai_service_url", aiServiceURL)
 	for {
 		processed, err := worker.RunOnce(ctx)
 		if err != nil {

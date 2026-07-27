@@ -61,6 +61,7 @@ func TestWorkerCompletesMessageWithLeaseAndAck(t *testing.T) {
 		},
 	}
 	worker := NewWorker(repository, consumer, "worker-1")
+	worker.Dependencies = NodeDependencies{AIClassifier: &fakeAIClassifier{}}
 
 	processed, err := worker.RunOnce(context.Background())
 	if err != nil {
