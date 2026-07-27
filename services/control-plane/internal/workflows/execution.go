@@ -62,7 +62,9 @@ type QueueMessage struct {
 type Lease struct {
 	NodeExecutionID string
 	WorkflowRunID   string
+	WorkflowName    string
 	NodeName        string
+	Input           json.RawMessage
 	WorkerID        string
 	Attempt         int
 	FencingToken    int64
@@ -79,8 +81,8 @@ type SchedulerRepository interface {
 type WorkerRepository interface {
 	AcquireNodeExecutionLease(ctx context.Context, nodeExecutionID string, workerID string, leaseDuration time.Duration) (Lease, error)
 	HeartbeatNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, leaseDuration time.Duration) error
-	CompleteNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, result json.RawMessage) error
-	FailNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, errText string) error
+	CompleteNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, result json.RawMessage, nextNodeName string) error
+	FailNodeExecution(ctx context.Context, nodeExecutionID string, workerID string, fencingToken int64, errText string, maxAttempts int) error
 }
 
 type QueuePublisher interface {
@@ -183,8 +185,22 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 		return true, err
 	}
 
-	result := json.RawMessage(`{"phase":"3","result":"completed placeholder node"}`)
-	if err := w.repository.CompleteNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, result); err != nil {
+	output, maxAttempts, err := ExecuteNode(NodeInput{
+		WorkflowName: lease.WorkflowName,
+		NodeName:     lease.NodeName,
+		Input:        lease.Input,
+	})
+	if err != nil {
+		if failErr := w.repository.FailNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, err.Error(), maxAttempts); failErr != nil {
+			return true, failErr
+		}
+		if ackErr := w.consumer.AckNodeExecution(ctx, message.ID); ackErr != nil {
+			return true, ackErr
+		}
+		return true, nil
+	}
+
+	if err := w.repository.CompleteNodeExecution(ctx, lease.NodeExecutionID, lease.WorkerID, lease.FencingToken, output.Result, output.NextNodeName); err != nil {
 		return true, err
 	}
 

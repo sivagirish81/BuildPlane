@@ -156,18 +156,39 @@ func (s *Server) workflowRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) workflowRunByID(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", http.MethodGet)
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		return
-	}
 	if s.workflows == nil {
 		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "workflow service is not configured")
 		return
 	}
 
-	id := strings.TrimPrefix(r.URL.Path, "/v1/workflow-runs/")
-	if id == "" || strings.Contains(id, "/") {
+	suffix := strings.TrimPrefix(r.URL.Path, "/v1/workflow-runs/")
+	if suffix == "" {
+		writeError(w, r, http.StatusNotFound, "not_found", "workflow run not found")
+		return
+	}
+
+	if strings.HasSuffix(suffix, "/audit") {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		id := strings.TrimSuffix(suffix, "/audit")
+		if id == "" || strings.Contains(id, "/") {
+			writeError(w, r, http.StatusNotFound, "not_found", "workflow run not found")
+			return
+		}
+		s.workflowRunAudit(w, r, id)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	id := suffix
+	if strings.Contains(id, "/") {
 		writeError(w, r, http.StatusNotFound, "not_found", "workflow run not found")
 		return
 	}
@@ -181,6 +202,18 @@ func (s *Server) workflowRunByID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, workflowRunResponse{
 		WorkflowRun: toWorkflowRunDTO(run),
 		Replayed:    false,
+	})
+}
+
+func (s *Server) workflowRunAudit(w http.ResponseWriter, r *http.Request, id string) {
+	records, err := s.workflows.ListAuditRecords(r.Context(), id)
+	if err != nil {
+		s.writeWorkflowError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, auditRecordsResponse{
+		AuditRecords: toAuditRecordDTOs(records),
 	})
 }
 
@@ -294,6 +327,21 @@ type workflowRunDTO struct {
 	UpdatedAt     time.Time        `json:"updated_at"`
 }
 
+type auditRecordsResponse struct {
+	AuditRecords []auditRecordDTO `json:"audit_records"`
+}
+
+type auditRecordDTO struct {
+	ID              int64           `json:"id"`
+	WorkflowRunID   string          `json:"workflow_run_id"`
+	NodeExecutionID string          `json:"node_execution_id,omitempty"`
+	EventType       string          `json:"event_type"`
+	ActorType       string          `json:"actor_type"`
+	ActorID         string          `json:"actor_id"`
+	Details         json.RawMessage `json:"details"`
+	CreatedAt       time.Time       `json:"created_at"`
+}
+
 type errorResponse struct {
 	Error         errorBody `json:"error"`
 	CorrelationID string    `json:"correlation_id"`
@@ -314,4 +362,21 @@ func toWorkflowRunDTO(run workflows.Run) workflowRunDTO {
 		CreatedAt:     run.CreatedAt,
 		UpdatedAt:     run.UpdatedAt,
 	}
+}
+
+func toAuditRecordDTOs(records []workflows.AuditRecord) []auditRecordDTO {
+	dtos := make([]auditRecordDTO, 0, len(records))
+	for _, record := range records {
+		dtos = append(dtos, auditRecordDTO{
+			ID:              record.ID,
+			WorkflowRunID:   record.WorkflowRunID,
+			NodeExecutionID: record.NodeExecutionID,
+			EventType:       record.EventType,
+			ActorType:       record.ActorType,
+			ActorID:         record.ActorID,
+			Details:         record.Details,
+			CreatedAt:       record.CreatedAt,
+		})
+	}
+	return dtos
 }

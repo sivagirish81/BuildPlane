@@ -206,6 +206,33 @@ func TestGetWorkflowRunReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestGetWorkflowRunAudit(t *testing.T) {
+	server := testServer(t)
+	headers := map[string]string{
+		"Idempotency-Key": "demo-key",
+		"Content-Type":    "application/json",
+	}
+	created := request(t, server, http.MethodPost, "/v1/workflow-runs", []byte(`{"workflow_name":"invoice-demo"}`), headers)
+	createdBody := decodeWorkflowRunResponse(t, created)
+
+	response := request(t, server, http.MethodGet, "/v1/workflow-runs/"+createdBody.WorkflowRun.ID+"/audit", nil, nil)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+
+	var body auditRecordsResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode audit response: %v", err)
+	}
+	if len(body.AuditRecords) != 1 {
+		t.Fatalf("expected one audit record, got %d", len(body.AuditRecords))
+	}
+	if body.AuditRecords[0].EventType != "workflow_run.created" {
+		t.Fatalf("expected workflow_run.created, got %q", body.AuditRecords[0].EventType)
+	}
+}
+
 func testServer(t *testing.T) http.Handler {
 	t.Helper()
 
@@ -255,12 +282,14 @@ func decodeWorkflowRunResponse(t *testing.T, response *httptest.ResponseRecorder
 type fakeRepository struct {
 	byID             map[string]workflows.Run
 	byIdempotencyKey map[string]string
+	audit            map[string][]workflows.AuditRecord
 }
 
 func newFakeRepository() *fakeRepository {
 	return &fakeRepository{
 		byID:             map[string]workflows.Run{},
 		byIdempotencyKey: map[string]string{},
+		audit:            map[string][]workflows.AuditRecord{},
 	}
 }
 
@@ -287,6 +316,15 @@ func (r *fakeRepository) CreateRun(_ context.Context, params workflows.CreateRun
 	}
 	r.byID[run.ID] = run
 	r.byIdempotencyKey[run.IdempotencyKey] = run.ID
+	r.audit[run.ID] = []workflows.AuditRecord{{
+		ID:            1,
+		WorkflowRunID: run.ID,
+		EventType:     "workflow_run.created",
+		ActorType:     "api",
+		ActorID:       run.CorrelationID,
+		Details:       json.RawMessage(`{"status":"queued"}`),
+		CreatedAt:     now,
+	}}
 	return run, true, nil
 }
 
@@ -296,6 +334,14 @@ func (r *fakeRepository) GetRun(_ context.Context, id string) (workflows.Run, er
 		return workflows.Run{}, workflows.ErrNotFound
 	}
 	return run, nil
+}
+
+func (r *fakeRepository) ListAuditRecords(_ context.Context, workflowRunID string) ([]workflows.AuditRecord, error) {
+	records, ok := r.audit[workflowRunID]
+	if !ok {
+		return nil, workflows.ErrNotFound
+	}
+	return records, nil
 }
 
 func (r *fakeRepository) Ping(context.Context) error {

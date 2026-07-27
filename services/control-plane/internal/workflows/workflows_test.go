@@ -102,6 +102,10 @@ func (r *fakeRepository) GetRun(_ context.Context, id string) (Run, error) {
 	return Run{}, ErrNotFound
 }
 
+func (r *fakeRepository) ListAuditRecords(context.Context, string) ([]AuditRecord, error) {
+	return nil, nil
+}
+
 func (r *fakeRepository) Ping(context.Context) error {
 	return nil
 }
