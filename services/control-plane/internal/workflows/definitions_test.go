@@ -57,6 +57,18 @@ func TestExecuteLocalWorkflowNodes(t *testing.T) {
 	}
 }
 
+func TestWorkerPoolForNode(t *testing.T) {
+	if got := WorkerPoolForNode("validate_input"); got != WorkerPoolGeneral {
+		t.Fatalf("expected validate_input on general pool, got %q", got)
+	}
+	if got := WorkerPoolForNode("compose_summary"); got != WorkerPoolGeneral {
+		t.Fatalf("expected compose_summary on general pool, got %q", got)
+	}
+	if got := WorkerPoolForNode("classify_issue"); got != WorkerPoolAI {
+		t.Fatalf("expected classify_issue on ai pool, got %q", got)
+	}
+}
+
 func TestExecuteLocalWorkflowRejectsMissingCaseID(t *testing.T) {
 	_, _, err := ExecuteNode(context.Background(), NodeInput{
 		WorkflowName: LocalDemoWorkflowName,

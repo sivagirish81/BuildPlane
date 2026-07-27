@@ -9,6 +9,11 @@ import (
 
 const LocalDemoWorkflowName = "phase4.local-demo"
 
+const (
+	WorkerPoolGeneral = "general"
+	WorkerPoolAI      = "ai"
+)
+
 var (
 	ErrUnknownWorkflow = errors.New("unknown workflow")
 	ErrUnknownNode     = errors.New("unknown workflow node")
@@ -49,6 +54,15 @@ func FirstNodeName(workflowName string) string {
 		return "validate_input"
 	}
 	return definition.Nodes[0].Name
+}
+
+func WorkerPoolForNode(nodeName string) string {
+	switch nodeName {
+	case "classify_issue":
+		return WorkerPoolAI
+	default:
+		return WorkerPoolGeneral
+	}
 }
 
 func DefinitionFor(workflowName string) (WorkflowDefinition, bool) {

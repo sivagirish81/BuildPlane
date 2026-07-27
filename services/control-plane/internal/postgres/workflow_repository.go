@@ -54,8 +54,9 @@ func (r *WorkflowRepository) CreateRun(ctx context.Context, params workflows.Cre
 			ActorType:       "api",
 			ActorID:         params.CorrelationID,
 			Details: map[string]any{
-				"node_name": params.InitialNodeName,
-				"status":    string(workflows.NodeStatusPending),
+				"node_name":   params.InitialNodeName,
+				"worker_pool": workflows.WorkerPoolForNode(params.InitialNodeName),
+				"status":      string(workflows.NodeStatusPending),
 			},
 		}); err != nil {
 			return workflows.Run{}, false, err
@@ -175,6 +176,7 @@ func insertInitialNodeExecution(ctx context.Context, tx *sql.Tx, workflowRunID s
 	if nodeName == "" {
 		nodeName = "validate_input"
 	}
+	workerPool := workflows.WorkerPoolForNode(nodeName)
 
 	nodeID, err := newID()
 	if err != nil {
@@ -186,10 +188,11 @@ INSERT INTO node_executions (
 	id,
 	workflow_run_id,
 	node_name,
+	worker_pool,
 	status
-) VALUES ($1, $2, $3, $4)`
+) VALUES ($1, $2, $3, $4, $5)`
 
-	if _, err := tx.ExecContext(ctx, query, nodeID, workflowRunID, nodeName, string(workflows.NodeStatusPending)); err != nil {
+	if _, err := tx.ExecContext(ctx, query, nodeID, workflowRunID, nodeName, workerPool, string(workflows.NodeStatusPending)); err != nil {
 		return "", fmt.Errorf("insert initial node execution: %w", err)
 	}
 	return nodeID, nil

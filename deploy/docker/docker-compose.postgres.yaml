@@ -37,6 +37,72 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/control-plane.Dockerfile
+    command: ["/buildplane-control-plane"]
+    environment:
+      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
+      BUILDPLANE_MIGRATIONS_DIR: /migrations
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  scheduler:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/control-plane.Dockerfile
+    command: ["/buildplane-scheduler"]
+    environment:
+      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
+      BUILDPLANE_REDIS_URL: redis://redis:6379/0
+      BUILDPLANE_MIGRATIONS_DIR: /migrations
+      BUILDPLANE_SCHEDULER_BATCH_SIZE: "10"
+      BUILDPLANE_SCHEDULER_INTERVAL: 2s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  worker-general:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/control-plane.Dockerfile
+    command: ["/buildplane-worker"]
+    environment:
+      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
+      BUILDPLANE_REDIS_URL: redis://redis:6379/0
+      BUILDPLANE_MIGRATIONS_DIR: /migrations
+      BUILDPLANE_WORKER_POOL: general
+      BUILDPLANE_WORKER_LEASE_DURATION: 30s
+      BUILDPLANE_WORKER_DRAIN_TIMEOUT: 25s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  worker-ai:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/control-plane.Dockerfile
+    command: ["/buildplane-worker"]
+    environment:
+      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
+      BUILDPLANE_REDIS_URL: redis://redis:6379/0
+      BUILDPLANE_MIGRATIONS_DIR: /migrations
+      BUILDPLANE_WORKER_POOL: ai
+      BUILDPLANE_WORKER_LEASE_DURATION: 30s
+      BUILDPLANE_WORKER_DRAIN_TIMEOUT: 25s
+      BUILDPLANE_AI_SERVICE_URL: http://ai-service:8090
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
 
 volumes:
   buildplane-postgres-data:

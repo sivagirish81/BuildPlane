@@ -24,6 +24,7 @@ spec:
         app.kubernetes.io/name: buildplane-control-plane
         app.kubernetes.io/part-of: buildplane
     spec:
+      serviceAccountName: buildplane-control-plane
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -41,7 +42,10 @@ spec:
                   name: buildplane-postgres
                   key: database-url
             - name: BUILDPLANE_MIGRATIONS_DIR
-              value: /migrations
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
           ports:
             - name: http
               containerPort: 8080

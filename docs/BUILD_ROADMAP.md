@@ -129,6 +129,8 @@ Learning focus:
 
 ## Phase 6: Kubernetes Worker Pools
 
+Status: Complete
+
 Goal: Run different worker types in Kubernetes with clear scheduling and
 resource controls.
 

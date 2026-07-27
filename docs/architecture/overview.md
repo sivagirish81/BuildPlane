@@ -180,3 +180,24 @@ flowchart LR
 The worker calls `classify_issue` through a typed HTTP client. The AI service is
 mock-backed by default, and the OpenAI provider is enabled only through
 environment configuration and credentials.
+
+## Current Phase 6 Runtime
+
+Phase 6 splits worker execution into Kubernetes worker pools:
+
+```mermaid
+flowchart LR
+  PG["PostgreSQL node_executions(worker_pool)"] --> Scheduler["Scheduler"]
+  Scheduler --> Outbox["Outbox payload includes worker_pool"]
+  Outbox --> GeneralStream["Redis stream: general"]
+  Outbox --> AIStream["Redis stream: ai"]
+  GeneralStream --> GeneralWorkers["Deployment: buildplane-worker-general"]
+  AIStream --> AIWorkers["Deployment: buildplane-worker-ai"]
+  AIWorkers --> AIService["Service: buildplane-ai-service"]
+  GeneralWorkers --> PG
+  AIWorkers --> PG
+```
+
+The durable state model is unchanged. Worker pools decide which Pods should see
+which queue messages; PostgreSQL leases and fencing still decide which worker is
+allowed to execute and complete a node.
