@@ -43,6 +43,8 @@ Learning focus:
 
 ## Phase 2: Durable Control Plane Skeleton
 
+Status: Complete
+
 Goal: Add a Go REST API backed by PostgreSQL with migrations.
 
 Planned behavior:

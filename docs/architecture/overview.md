@@ -100,3 +100,27 @@ flowchart LR
 The service is intentionally small. It proves the path from Go source code to
 container image to Kubernetes Deployment and Service before adding PostgreSQL,
 Redis, CRDs, or workers.
+
+## Current Phase 2 Runtime
+
+Phase 2 makes workflow creation durable:
+
+```mermaid
+flowchart LR
+  Client["Client"] --> API["Go REST API"]
+  API --> Validate["Validate JSON and Idempotency-Key"]
+  Validate --> Hash["Compute request hash"]
+  Hash --> Tx["PostgreSQL transaction"]
+  Tx --> Runs["workflow_runs"]
+  Tx --> Migrations["schema_migrations"]
+  API --> Logs["Structured logs with correlation ID"]
+```
+
+The only workflow state transition implemented so far is:
+
+```text
+created request -> queued workflow_run
+```
+
+Redis, workers, node state machines, and outbox publication begin in later
+phases.
