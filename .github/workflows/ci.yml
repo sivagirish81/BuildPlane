@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+
+      - name: Check Go formatting
+        run: |
+          files="$(gofmt -l services/control-plane services/operator)"
+          if [ -n "$files" ]; then
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Test control plane
+        run: go test ./services/control-plane/...
+
+      - name: Test operator
+        run: go test ./services/operator/...
+
+      - name: Build binaries
+        run: |
+          go build ./services/control-plane/cmd/buildplane-control-plane
+          go build ./services/control-plane/cmd/buildplane-scheduler
+          go build ./services/control-plane/cmd/buildplane-worker
+          go build ./services/operator/cmd/buildplane-operator
+
+  python:
+    name: Python AI service tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install AI service test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e 'ai-service[dev]'
+
+      - name: Test AI service
+        run: python -m pytest ai-service/tests
+
+  repository-checks:
+    name: Repository checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate Kubernetes manifests
+        run: |
+          ruby -e 'require "yaml"; %w[deploy/kind/buildplane-control-plane.yaml deploy/kind/buildplane-config.yaml deploy/kind/buildplane-rbac.yaml deploy/kind/buildplane-redis.yaml deploy/kind/buildplane-scheduler-worker.yaml deploy/kind/buildplane-ai-service.yaml deploy/kind/buildplane-runtime-crd.yaml deploy/kind/buildplane-operator.yaml deploy/kind/buildplane-runtime-sample.yaml deploy/kind/buildplane-observability.yaml].each { |path| YAML.load_stream(File.read(path)) }'
+
+      - name: Validate JSON examples
+        run: |
+          ruby -e 'require "json"; JSON.parse(File.read("deploy/grafana/buildplane-overview.json")); JSON.parse(File.read("examples/component-versions/issue-classifier-v2.json")); JSON.parse(File.read("examples/demo-workflows/invoice-exception.json")); JSON.parse(File.read("examples/demo-workflows/freight-exception.json"))'
+
+      - name: Validate important migration metadata
+        run: |
+          ruby -e 'sql = File.read("migrations/0007_component_evaluation_release_gates.sql"); %w[component_versions component_evaluation_runs component_release_events issue_classifier promoted].each { |needle| abort "missing #{needle}" unless sql.include?(needle) }'
+
+      - name: Check for whitespace errors
+        run: git diff --check
