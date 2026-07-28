@@ -1,0 +1,276 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-scheduler
+  labels:
+    app.kubernetes.io/name: buildplane-scheduler
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.scheduler.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-scheduler
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      serviceAccountName: buildplane-scheduler
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: scheduler
+          image: {{ include "buildplane.image" .Values.controlPlane.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - /buildplane-scheduler
+          ports:
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.urlKey }}
+            - name: BUILDPLANE_REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: redis-url
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
+            - name: BUILDPLANE_SCHEDULER_BATCH_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: scheduler-batch-size
+            - name: BUILDPLANE_SCHEDULER_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: scheduler-interval
+            - name: BUILDPLANE_METRICS_ADDR
+              value: :9090
+          resources:
+            {{- toYaml .Values.scheduler.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-worker-general
+  labels:
+    app.kubernetes.io/name: buildplane-worker-general
+    buildplane.io/worker-pool: general
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.workers.general.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-worker-general
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-worker-general
+        app.kubernetes.io/part-of: buildplane
+        buildplane.io/worker-pool: general
+    spec:
+      serviceAccountName: buildplane-worker-general
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: {{ include "buildplane.image" .Values.controlPlane.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - /buildplane-worker
+          ports:
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.urlKey }}
+            - name: BUILDPLANE_REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: redis-url
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
+            - name: BUILDPLANE_WORKER_POOL
+              value: general
+            - name: BUILDPLANE_WORKER_LEASE_DURATION
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-lease-duration
+            - name: BUILDPLANE_WORKER_DRAIN_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-drain-timeout
+            - name: BUILDPLANE_METRICS_ADDR
+              value: :9090
+          resources:
+            {{- toYaml .Values.workers.general.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-worker-ai
+  labels:
+    app.kubernetes.io/name: buildplane-worker-ai
+    buildplane.io/worker-pool: ai
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.workers.ai.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-worker-ai
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-worker-ai
+        app.kubernetes.io/part-of: buildplane
+        buildplane.io/worker-pool: ai
+    spec:
+      serviceAccountName: buildplane-worker-ai
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: {{ include "buildplane.image" .Values.controlPlane.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - /buildplane-worker
+          ports:
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.urlKey }}
+            - name: BUILDPLANE_REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: redis-url
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
+            - name: BUILDPLANE_WORKER_POOL
+              value: ai
+            - name: BUILDPLANE_WORKER_LEASE_DURATION
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-lease-duration
+            - name: BUILDPLANE_WORKER_DRAIN_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: worker-drain-timeout
+            - name: BUILDPLANE_AI_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: ai-service-url
+            - name: BUILDPLANE_METRICS_ADDR
+              value: :9090
+          resources:
+            {{- toYaml .Values.workers.ai.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-scheduler-metrics
+  labels:
+    app.kubernetes.io/name: buildplane-scheduler
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-scheduler
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-worker-general-metrics
+  labels:
+    app.kubernetes.io/name: buildplane-worker-general
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-worker-general
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-worker-ai-metrics
+  labels:
+    app.kubernetes.io/name: buildplane-worker-ai
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-worker-ai
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics

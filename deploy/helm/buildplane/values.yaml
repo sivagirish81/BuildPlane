@@ -1,0 +1,132 @@
+global:
+  imagePullPolicy: IfNotPresent
+
+database:
+  existingSecret: buildplane-postgres
+  urlKey: database-url
+  url: ""
+
+runtimeConfig:
+  redisURL: redis://buildplane-redis:6379/0
+  migrationsDir: /migrations
+  schedulerBatchSize: "10"
+  schedulerInterval: 2s
+  workerLeaseDuration: 30s
+  workerDrainTimeout: 25s
+  aiServiceURL: http://buildplane-ai-service:8090
+
+controlPlane:
+  replicas: 2
+  image:
+    repository: buildplane/control-plane
+    tag: dev
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+scheduler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+workers:
+  general:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+  ai:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+aiService:
+  replicas: 1
+  image:
+    repository: buildplane/ai-service
+    tag: dev
+  provider: mock
+  promptVersion: issue_classifier_v1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+web:
+  enabled: true
+  replicas: 1
+  image:
+    repository: buildplane/web
+    tag: dev
+  service:
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+operator:
+  enabled: true
+  replicas: 1
+  image:
+    repository: buildplane/operator
+    tag: dev
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+
+runtime:
+  enabled: true
+  name: default-runtime
+
+observability:
+  enabled: true
+  prometheus:
+    image:
+      repository: prom/prometheus
+      tag: v3.0.1
+  grafana:
+    image:
+      repository: grafana/grafana
+      tag: 11.5.0

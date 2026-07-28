@@ -100,6 +100,35 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+  deployment-packaging:
+    name: Deployment packaging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint deploy/helm/buildplane
+
+      - name: Render Helm chart
+        run: helm template buildplane deploy/helm/buildplane --namespace buildplane-system --include-crds --values deploy/helm/buildplane/values-gke.example.yaml
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive infra/gke
+
+      - name: Initialize Terraform
+        run: terraform -chdir=infra/gke init -backend=false
+
+      - name: Validate Terraform
+        run: terraform -chdir=infra/gke validate
+
   repository-checks:
     name: Repository checks
     runs-on: ubuntu-latest

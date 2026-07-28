@@ -306,3 +306,30 @@ The console reads workflow, audit, dependency, and release state through the API
 Human approval and component release actions also go through the API, preserving
 the validation and audit boundary. The browser does not talk directly to
 PostgreSQL, Redis, worker processes, or Kubernetes.
+
+## Current Phase 12 Runtime
+
+Phase 12 packages BuildPlane for cloud Kubernetes:
+
+```mermaid
+flowchart TB
+  TF["Terraform infra/gke"] --> GKE["GKE cluster"]
+  TF --> AR["Artifact Registry"]
+  Images["BuildPlane images"] --> AR
+  Helm["Helm chart"] --> GKE
+  GKE --> Web["buildplane-web"]
+  GKE --> API["buildplane-control-plane"]
+  GKE --> Sched["buildplane-scheduler"]
+  GKE --> Workers["worker pools"]
+  GKE --> AI["buildplane-ai-service"]
+  GKE --> Redis["buildplane-redis"]
+  GKE --> Operator["buildplane-operator"]
+  API --> PG["External PostgreSQL"]
+  Sched --> PG
+  Workers --> PG
+```
+
+Terraform creates cloud infrastructure: network, subnet, GKE cluster, node
+pool, and Artifact Registry. Helm installs Kubernetes application resources.
+PostgreSQL remains external and is connected through a Kubernetes Secret, so the
+workflow state boundary remains the same as earlier phases.

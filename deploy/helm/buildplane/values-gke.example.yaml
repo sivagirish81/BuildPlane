@@ -1,0 +1,33 @@
+global:
+  imagePullPolicy: IfNotPresent
+
+database:
+  existingSecret: buildplane-postgres
+  urlKey: database-url
+  url: ""
+
+controlPlane:
+  image:
+    repository: us-central1-docker.pkg.dev/my-gcp-project/buildplane/control-plane
+    tag: phase-12-demo
+
+aiService:
+  image:
+    repository: us-central1-docker.pkg.dev/my-gcp-project/buildplane/ai-service
+    tag: phase-12-demo
+
+web:
+  image:
+    repository: us-central1-docker.pkg.dev/my-gcp-project/buildplane/web
+    tag: phase-12-demo
+
+operator:
+  image:
+    repository: us-central1-docker.pkg.dev/my-gcp-project/buildplane/operator
+    tag: phase-12-demo
+
+runtime:
+  name: gke-runtime
+
+observability:
+  enabled: true
