@@ -13,16 +13,21 @@ data:
   worker-lease-duration: {{ .Values.runtimeConfig.workerLeaseDuration | quote }}
   worker-drain-timeout: {{ .Values.runtimeConfig.workerDrainTimeout | quote }}
   ai-service-url: {{ .Values.runtimeConfig.aiServiceURL | quote }}
-{{- if .Values.database.url }}
+{{- if .Values.database.createSecret }}
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .Values.database.existingSecret }}
+  name: {{ include "buildplane.databaseSecretName" . }}
   labels:
     app.kubernetes.io/name: buildplane-postgres
     {{- include "buildplane.labels" . | nindent 4 }}
 type: Opaque
 stringData:
-  {{ .Values.database.urlKey }}: {{ .Values.database.url | quote }}
+  {{ include "buildplane.databaseSecretKey" . }}: {{ include "buildplane.databaseURL" . | quote }}
+  {{- if .Values.postgres.enabled }}
+  username: {{ .Values.postgres.auth.username | quote }}
+  password: {{ .Values.postgres.auth.password | quote }}
+  database: {{ .Values.postgres.auth.database | quote }}
+  {{- end }}
 {{- end }}

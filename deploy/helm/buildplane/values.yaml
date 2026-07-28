@@ -2,9 +2,35 @@ global:
   imagePullPolicy: IfNotPresent
 
 database:
+  # Keep false for normal installs: create this Secret outside Helm so database
+  # credentials can be rotated without the chart owning secret material.
+  # Local kind development can set this to true together with postgres.enabled.
+  createSecret: false
   existingSecret: buildplane-postgres
   urlKey: database-url
+  # Only used when database.createSecret=true.
   url: ""
+
+postgres:
+  # Disabled by default because production should use managed or separately
+  # operated PostgreSQL. Enable in values-kind.yaml for local Helm learning.
+  enabled: false
+  image:
+    repository: postgres
+    tag: 17-alpine
+  auth:
+    username: buildplane
+    password: buildplane_dev_password
+    database: buildplane
+  persistence:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 runtimeConfig:
   redisURL: redis://buildplane-redis:6379/0

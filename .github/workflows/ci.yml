@@ -115,7 +115,27 @@ jobs:
         run: helm lint deploy/helm/buildplane
 
       - name: Render Helm chart
-        run: helm template buildplane deploy/helm/buildplane --namespace buildplane-system --include-crds --values deploy/helm/buildplane/values-gke.example.yaml
+        run: |
+          mkdir -p /tmp/buildplane-ci
+          helm template buildplane deploy/helm/buildplane \
+            --namespace buildplane-system \
+            --include-crds \
+            --values deploy/helm/buildplane/values-gke.example.yaml \
+            > /tmp/buildplane-ci/buildplane-gke.yaml
+          helm template buildplane deploy/helm/buildplane \
+            --namespace buildplane-system \
+            --include-crds \
+            --values deploy/helm/buildplane/values-kind.yaml \
+            > /tmp/buildplane-ci/buildplane-kind.yaml
+
+      - name: Assert external database Secret references
+        run: ruby scripts/assert_helm_database_secret_refs.rb /tmp/buildplane-ci/buildplane-gke.yaml
+
+      - name: Assert local kind database Secret references
+        run: ruby scripts/assert_helm_database_secret_refs.rb /tmp/buildplane-ci/buildplane-kind.yaml
+        env:
+          EXPECT_RENDERED_DATABASE_SECRET: "1"
+          EXPECT_POSTGRES_STATEFULSET: "1"
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
