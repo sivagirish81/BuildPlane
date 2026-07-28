@@ -263,15 +263,19 @@ Learning focus:
 
 ## Phase 12: Cloud Deployment
 
+Status: Complete
+
 Goal: Deploy the platform to GKE with Terraform and Helm.
 
-Planned behavior:
+Implemented behavior:
 
 - Helm chart
-- Terraform for GKE infrastructure
+- Terraform scaffold for GKE infrastructure
+- Frontend static web container for Kubernetes deployment
 - Cloud deployment guide
 - Operational runbook
 - Notes on how the architecture could map to EKS
+- CI checks for Helm rendering and Terraform formatting/validation
 
 Learning focus:
 

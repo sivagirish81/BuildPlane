@@ -1,0 +1,6 @@
+apiVersion: v2
+name: buildplane
+description: Kubernetes-native AI workflow control plane
+type: application
+version: 0.12.0
+appVersion: "0.12.0"

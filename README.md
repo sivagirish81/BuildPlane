@@ -234,6 +234,38 @@ URL printed by Vite and use the console to create demo workflow runs, inspect
 audit timelines, submit human decisions, and operate the synthetic
 `issue_classifier` release flow.
 
+## Phase 12: Cloud Deployment
+
+Phase 12 adds a Helm chart and GKE Terraform scaffold.
+
+Render the Helm chart locally:
+
+```bash
+helm lint deploy/helm/buildplane
+helm template buildplane deploy/helm/buildplane \
+  --namespace buildplane-system \
+  --include-crds \
+  --values deploy/helm/buildplane/values-gke.example.yaml
+```
+
+Plan GKE infrastructure:
+
+```bash
+cd infra/gke
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan
+```
+
+Build the frontend web image:
+
+```bash
+docker build -f deploy/docker/web.Dockerfile -t buildplane/web:dev .
+```
+
+See [GKE deployment guide](docs/deployment/gke.md) and
+[cloud operations runbook](docs/runbooks/cloud-operations.md).
+
 ## Phase 5: Python AI Service
 
 Phase 5 inserts a bounded AI classification node into the local workflow:

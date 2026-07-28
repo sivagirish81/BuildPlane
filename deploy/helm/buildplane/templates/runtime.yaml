@@ -1,0 +1,16 @@
+{{- if .Values.runtime.enabled }}
+apiVersion: buildplane.io/v1alpha1
+kind: BuildPlaneRuntime
+metadata:
+  name: {{ .Values.runtime.name }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.runtime.name }}
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  schedulerReplicas: {{ .Values.scheduler.replicas }}
+  workerPools:
+    general:
+      replicas: {{ .Values.workers.general.replicas }}
+    ai:
+      replicas: {{ .Values.workers.ai.replicas }}
+{{- end }}

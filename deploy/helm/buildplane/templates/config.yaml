@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildplane-runtime-config
+  labels:
+    app.kubernetes.io/name: buildplane-runtime-config
+    {{- include "buildplane.labels" . | nindent 4 }}
+data:
+  redis-url: {{ .Values.runtimeConfig.redisURL | quote }}
+  migrations-dir: {{ .Values.runtimeConfig.migrationsDir | quote }}
+  scheduler-batch-size: {{ .Values.runtimeConfig.schedulerBatchSize | quote }}
+  scheduler-interval: {{ .Values.runtimeConfig.schedulerInterval | quote }}
+  worker-lease-duration: {{ .Values.runtimeConfig.workerLeaseDuration | quote }}
+  worker-drain-timeout: {{ .Values.runtimeConfig.workerDrainTimeout | quote }}
+  ai-service-url: {{ .Values.runtimeConfig.aiServiceURL | quote }}
+{{- if .Values.database.url }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.database.existingSecret }}
+  labels:
+    app.kubernetes.io/name: buildplane-postgres
+    {{- include "buildplane.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{ .Values.database.urlKey }}: {{ .Values.database.url | quote }}
+{{- end }}

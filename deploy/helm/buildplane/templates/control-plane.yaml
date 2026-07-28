@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-control-plane
+  labels:
+    app.kubernetes.io/name: buildplane-control-plane
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.controlPlane.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-control-plane
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-control-plane
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      serviceAccountName: buildplane-control-plane
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: control-plane
+          image: {{ include "buildplane.image" .Values.controlPlane.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: BUILDPLANE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.urlKey }}
+            - name: BUILDPLANE_MIGRATIONS_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: buildplane-runtime-config
+                  key: migrations-dir
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-control-plane
+  labels:
+    app.kubernetes.io/name: buildplane-control-plane
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-control-plane
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

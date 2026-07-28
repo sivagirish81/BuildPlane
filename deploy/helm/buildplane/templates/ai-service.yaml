@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildplane-ai-service
+  labels:
+    app.kubernetes.io/name: buildplane-ai-service
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.aiService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-ai-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-ai-service
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      serviceAccountName: buildplane-ai-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ai-service
+          image: {{ include "buildplane.image" .Values.aiService.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8090
+          env:
+            - name: BUILDPLANE_AI_PROVIDER
+              value: {{ .Values.aiService.provider | quote }}
+            - name: BUILDPLANE_AI_PROMPT_VERSION
+              value: {{ .Values.aiService.promptVersion | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.aiService.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-ai-service
+  labels:
+    app.kubernetes.io/name: buildplane-ai-service
+    {{- include "buildplane.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-ai-service
+  ports:
+    - name: http
+      port: 8090
+      targetPort: http
