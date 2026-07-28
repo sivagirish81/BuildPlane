@@ -28,11 +28,7 @@ spec:
           image: {{ include "buildplane.image" .Values.controlPlane.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           env:
-            - name: BUILDPLANE_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
-                  key: {{ .Values.database.urlKey }}
+            {{- include "buildplane.databaseURLEnv" . | nindent 12 }}
             - name: BUILDPLANE_MIGRATIONS_DIR
               valueFrom:
                 configMapKeyRef:

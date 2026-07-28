@@ -392,7 +392,53 @@ kind load docker-image buildplane/operator:dev --name buildplane
 kind load docker-image buildplane/web:dev --name buildplane
 ```
 
-Apply the local manifests:
+Install the local stack with Helm:
+
+```bash
+helm lint deploy/helm/buildplane
+helm template buildplane deploy/helm/buildplane \
+  --namespace buildplane-system \
+  --include-crds \
+  --values deploy/helm/buildplane/values-kind.yaml
+
+helm upgrade --install buildplane deploy/helm/buildplane \
+  --namespace buildplane-system \
+  --create-namespace \
+  --values deploy/helm/buildplane/values-kind.yaml \
+  --wait \
+  --timeout 10m
+```
+
+The local kind profile enables a single-replica PostgreSQL StatefulSet inside
+Kubernetes and creates the synthetic `buildplane-postgres` Secret through Helm.
+You do not need Docker Compose for this path.
+
+If you previously installed resources manually with `kubectl apply`, reset the
+local namespace before switching to Helm so Helm can own the resources cleanly:
+
+```bash
+kubectl delete namespace buildplane-system
+kubectl wait --for=delete namespace/buildplane-system --timeout=120s
+
+helm upgrade --install buildplane deploy/helm/buildplane \
+  --namespace buildplane-system \
+  --create-namespace \
+  --values deploy/helm/buildplane/values-kind.yaml \
+  --wait \
+  --timeout 10m
+```
+
+Inspect:
+
+```bash
+kubectl get pods -n buildplane-system
+kubectl get buildplaneruntime -n buildplane-system
+kubectl port-forward -n buildplane-system service/buildplane-control-plane 8080:80
+```
+
+The lower-level `deploy/kind/*.yaml` manifests are kept as learning artifacts
+for understanding what Helm renders. If you want to apply them directly instead
+of using Helm, apply the local manifests:
 
 ```bash
 kubectl apply -f deploy/kind/buildplane-config.yaml
@@ -409,30 +455,10 @@ kubectl apply -f deploy/kind/buildplane-runtime-sample.yaml
 kubectl apply -f deploy/kind/buildplane-observability.yaml
 ```
 
-Inspect:
-
-```bash
-kubectl get pods -n buildplane-system
-kubectl get buildplaneruntime -n buildplane-system
-kubectl port-forward -n buildplane-system service/buildplane-control-plane 8080:80
-```
-
-If you previously applied the manifests before `buildplane-postgres.yaml`
-existed, apply the two database manifests and restart the clients:
-
-```bash
-kubectl apply -f deploy/kind/buildplane-config.yaml
-kubectl apply -f deploy/kind/buildplane-postgres.yaml
-kubectl rollout status statefulset/buildplane-postgres -n buildplane-system
-kubectl rollout restart deployment/buildplane-control-plane -n buildplane-system
-kubectl rollout restart deployment/buildplane-scheduler -n buildplane-system
-kubectl rollout restart deployment/buildplane-worker-general -n buildplane-system
-kubectl rollout restart deployment/buildplane-worker-ai -n buildplane-system
-```
-
 ## Kubernetes: Helm
 
-Render the chart:
+For production-like environments, keep PostgreSQL outside this chart and create
+the database Secret before installing BuildPlane:
 
 ```bash
 helm lint deploy/helm/buildplane
@@ -442,23 +468,27 @@ helm template buildplane deploy/helm/buildplane \
   --values deploy/helm/buildplane/values-gke.example.yaml
 ```
 
-Install or upgrade:
-
-```bash
-helm upgrade --install buildplane deploy/helm/buildplane \
-  --namespace buildplane-system \
-  --create-namespace \
-  --values deploy/helm/buildplane/values-gke.example.yaml
-```
-
-The chart expects a `buildplane-postgres` Secret unless you provide
-`database.url` through Helm values:
+The default chart expects an externally managed `buildplane-postgres` Secret.
+Helm references this Secret from the control plane, scheduler, general worker,
+and AI worker, but it does not create or overwrite the Secret unless
+`database.createSecret=true` is explicitly set.
 
 ```bash
 kubectl create namespace buildplane-system
 kubectl create secret generic buildplane-postgres \
   --namespace buildplane-system \
   --from-literal=database-url="$BUILDPLANE_DATABASE_URL"
+```
+
+Install or upgrade:
+
+```bash
+helm upgrade --install buildplane deploy/helm/buildplane \
+  --namespace buildplane-system \
+  --create-namespace \
+  --values deploy/helm/buildplane/values-gke.example.yaml \
+  --wait \
+  --timeout 10m
 ```
 
 ## Cloud: GKE

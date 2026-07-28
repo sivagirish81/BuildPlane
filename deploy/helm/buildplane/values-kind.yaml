@@ -1,0 +1,45 @@
+# Local kind profile.
+#
+# This profile is intentionally for development and Kubernetes learning:
+# Helm owns a single-replica PostgreSQL StatefulSet and a synthetic Secret so
+# the whole BuildPlane stack can start with one Helm install.
+global:
+  imagePullPolicy: IfNotPresent
+
+database:
+  createSecret: true
+  existingSecret: buildplane-postgres
+  urlKey: database-url
+  url: ""
+
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 17-alpine
+  auth:
+    username: buildplane
+    password: buildplane_dev_password
+    database: buildplane
+  persistence:
+    size: 1Gi
+
+controlPlane:
+  image:
+    repository: buildplane/control-plane
+    tag: dev
+
+aiService:
+  image:
+    repository: buildplane/ai-service
+    tag: dev
+
+web:
+  image:
+    repository: buildplane/web
+    tag: dev
+
+operator:
+  image:
+    repository: buildplane/operator
+    tag: dev

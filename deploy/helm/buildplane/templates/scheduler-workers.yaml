@@ -34,11 +34,7 @@ spec:
             - name: metrics
               containerPort: 9090
           env:
-            - name: BUILDPLANE_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
-                  key: {{ .Values.database.urlKey }}
+            {{- include "buildplane.databaseURLEnv" . | nindent 12 }}
             - name: BUILDPLANE_REDIS_URL
               valueFrom:
                 configMapKeyRef:
@@ -108,11 +104,7 @@ spec:
             - name: metrics
               containerPort: 9090
           env:
-            - name: BUILDPLANE_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
-                  key: {{ .Values.database.urlKey }}
+            {{- include "buildplane.databaseURLEnv" . | nindent 12 }}
             - name: BUILDPLANE_REDIS_URL
               valueFrom:
                 configMapKeyRef:
@@ -184,11 +176,7 @@ spec:
             - name: metrics
               containerPort: 9090
           env:
-            - name: BUILDPLANE_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
-                  key: {{ .Values.database.urlKey }}
+            {{- include "buildplane.databaseURLEnv" . | nindent 12 }}
             - name: BUILDPLANE_REDIS_URL
               valueFrom:
                 configMapKeyRef:

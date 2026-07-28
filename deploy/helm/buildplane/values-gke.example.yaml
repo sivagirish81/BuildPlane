@@ -2,9 +2,16 @@ global:
   imagePullPolicy: IfNotPresent
 
 database:
+  # Keep false for normal installs: create this Secret outside Helm so database
+  # credentials can be rotated without the chart owning secret material.
+  createSecret: false
   existingSecret: buildplane-postgres
   urlKey: database-url
+  # Only used when database.createSecret=true.
   url: ""
+
+postgres:
+  enabled: false
 
 controlPlane:
   image:
