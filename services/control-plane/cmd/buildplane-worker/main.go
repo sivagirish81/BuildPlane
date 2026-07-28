@@ -46,10 +46,10 @@ func run(logger *slog.Logger) error {
 		workerID = fmt.Sprintf("%s-%s", workerPool, hostname)
 	}
 
-	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancelStartup()
 
-	db, err := postgres.Open(startupCtx, databaseURL)
+	db, err := postgres.OpenWithRetry(startupCtx, databaseURL, time.Second)
 	if err != nil {
 		return err
 	}

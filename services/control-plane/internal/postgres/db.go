@@ -26,3 +26,26 @@ func Open(ctx context.Context, databaseURL string) (*sql.DB, error) {
 
 	return db, nil
 }
+
+func OpenWithRetry(ctx context.Context, databaseURL string, interval time.Duration) (*sql.DB, error) {
+	if interval <= 0 {
+		interval = time.Second
+	}
+
+	var lastErr error
+	for {
+		db, err := Open(ctx, databaseURL)
+		if err == nil {
+			return db, nil
+		}
+		lastErr = err
+
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("connect to postgres before startup deadline: %w", lastErr)
+		case <-timer.C:
+		}
+	}
+}

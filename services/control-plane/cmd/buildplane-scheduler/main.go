@@ -34,10 +34,10 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("BUILDPLANE_REDIS_URL is required")
 	}
 
-	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancelStartup()
 
-	db, err := postgres.Open(startupCtx, databaseURL)
+	db, err := postgres.OpenWithRetry(startupCtx, databaseURL, time.Second)
 	if err != nil {
 		return err
 	}
