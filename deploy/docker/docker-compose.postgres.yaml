@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: buildplane
-      POSTGRES_PASSWORD: buildplane_dev_password
-      POSTGRES_DB: buildplane
+      POSTGRES_USER: ${POSTGRES_USER:-buildplane}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buildplane_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-buildplane}
     ports:
-      - "5432:5432"
+      - "${BUILDPLANE_POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U buildplane -d buildplane"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buildplane} -d ${POSTGRES_DB:-buildplane}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -17,7 +17,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${BUILDPLANE_REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -28,10 +28,11 @@ services:
       context: ../..
       dockerfile: deploy/docker/ai-service.Dockerfile
     environment:
-      BUILDPLANE_AI_PROVIDER: mock
-      BUILDPLANE_AI_PROMPT_VERSION: issue_classifier_v1
+      BUILDPLANE_AI_PROVIDER: ${BUILDPLANE_AI_PROVIDER:-mock}
+      BUILDPLANE_AI_PROMPT_VERSION: ${BUILDPLANE_AI_PROMPT_VERSION:-issue_classifier_v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
-      - "8090:8090"
+      - "${BUILDPLANE_AI_SERVICE_PORT:-8090}:8090"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
       interval: 5s
@@ -43,10 +44,10 @@ services:
       dockerfile: deploy/docker/control-plane.Dockerfile
     command: ["/buildplane-control-plane"]
     environment:
-      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
-      BUILDPLANE_MIGRATIONS_DIR: /migrations
+      BUILDPLANE_DATABASE_URL: ${BUILDPLANE_DOCKER_DATABASE_URL:-postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable}
+      BUILDPLANE_MIGRATIONS_DIR: ${BUILDPLANE_DOCKER_MIGRATIONS_DIR:-/migrations}
     ports:
-      - "8080:8080"
+      - "${BUILDPLANE_API_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,11 +57,11 @@ services:
       dockerfile: deploy/docker/control-plane.Dockerfile
     command: ["/buildplane-scheduler"]
     environment:
-      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
-      BUILDPLANE_REDIS_URL: redis://redis:6379/0
-      BUILDPLANE_MIGRATIONS_DIR: /migrations
-      BUILDPLANE_SCHEDULER_BATCH_SIZE: "10"
-      BUILDPLANE_SCHEDULER_INTERVAL: 2s
+      BUILDPLANE_DATABASE_URL: ${BUILDPLANE_DOCKER_DATABASE_URL:-postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable}
+      BUILDPLANE_REDIS_URL: ${BUILDPLANE_DOCKER_REDIS_URL:-redis://redis:6379/0}
+      BUILDPLANE_MIGRATIONS_DIR: ${BUILDPLANE_DOCKER_MIGRATIONS_DIR:-/migrations}
+      BUILDPLANE_SCHEDULER_BATCH_SIZE: ${BUILDPLANE_SCHEDULER_BATCH_SIZE:-10}
+      BUILDPLANE_SCHEDULER_INTERVAL: ${BUILDPLANE_SCHEDULER_INTERVAL:-2s}
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,12 +73,12 @@ services:
       dockerfile: deploy/docker/control-plane.Dockerfile
     command: ["/buildplane-worker"]
     environment:
-      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
-      BUILDPLANE_REDIS_URL: redis://redis:6379/0
-      BUILDPLANE_MIGRATIONS_DIR: /migrations
+      BUILDPLANE_DATABASE_URL: ${BUILDPLANE_DOCKER_DATABASE_URL:-postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable}
+      BUILDPLANE_REDIS_URL: ${BUILDPLANE_DOCKER_REDIS_URL:-redis://redis:6379/0}
+      BUILDPLANE_MIGRATIONS_DIR: ${BUILDPLANE_DOCKER_MIGRATIONS_DIR:-/migrations}
       BUILDPLANE_WORKER_POOL: general
-      BUILDPLANE_WORKER_LEASE_DURATION: 30s
-      BUILDPLANE_WORKER_DRAIN_TIMEOUT: 25s
+      BUILDPLANE_WORKER_LEASE_DURATION: ${BUILDPLANE_WORKER_LEASE_DURATION:-30s}
+      BUILDPLANE_WORKER_DRAIN_TIMEOUT: ${BUILDPLANE_WORKER_DRAIN_TIMEOUT:-25s}
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,13 +90,13 @@ services:
       dockerfile: deploy/docker/control-plane.Dockerfile
     command: ["/buildplane-worker"]
     environment:
-      BUILDPLANE_DATABASE_URL: postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable
-      BUILDPLANE_REDIS_URL: redis://redis:6379/0
-      BUILDPLANE_MIGRATIONS_DIR: /migrations
+      BUILDPLANE_DATABASE_URL: ${BUILDPLANE_DOCKER_DATABASE_URL:-postgres://buildplane:buildplane_dev_password@postgres:5432/buildplane?sslmode=disable}
+      BUILDPLANE_REDIS_URL: ${BUILDPLANE_DOCKER_REDIS_URL:-redis://redis:6379/0}
+      BUILDPLANE_MIGRATIONS_DIR: ${BUILDPLANE_DOCKER_MIGRATIONS_DIR:-/migrations}
       BUILDPLANE_WORKER_POOL: ai
-      BUILDPLANE_WORKER_LEASE_DURATION: 30s
-      BUILDPLANE_WORKER_DRAIN_TIMEOUT: 25s
-      BUILDPLANE_AI_SERVICE_URL: http://ai-service:8090
+      BUILDPLANE_WORKER_LEASE_DURATION: ${BUILDPLANE_WORKER_LEASE_DURATION:-30s}
+      BUILDPLANE_WORKER_DRAIN_TIMEOUT: ${BUILDPLANE_WORKER_DRAIN_TIMEOUT:-25s}
+      BUILDPLANE_AI_SERVICE_URL: ${BUILDPLANE_DOCKER_AI_SERVICE_URL:-http://ai-service:8090}
     depends_on:
       postgres:
         condition: service_healthy
