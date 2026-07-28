@@ -373,7 +373,12 @@ Do not commit real API keys, database URLs, or secret values.
 
 ## Kubernetes: Local kind
 
-Build images:
+The recommended local Kubernetes path is Helm with the local kind values file.
+This installs the full development stack inside Kubernetes, including a
+single-replica PostgreSQL StatefulSet. Do not start Docker Compose Postgres and
+do not create the database Secret manually for this path.
+
+Build the local images:
 
 ```bash
 docker build -f deploy/docker/control-plane.Dockerfile -t buildplane/control-plane:dev .
@@ -382,24 +387,26 @@ docker build -f deploy/docker/operator.Dockerfile -t buildplane/operator:dev .
 docker build -f deploy/docker/web.Dockerfile -t buildplane/web:dev .
 ```
 
-Create a cluster:
+Create the kind cluster if it does not already exist:
 
 ```bash
 kind create cluster --config deploy/kind/cluster.yaml
+kubectl config use-context kind-buildplane
+```
+
+Load the images into kind:
+
+```bash
 kind load docker-image buildplane/control-plane:dev --name buildplane
 kind load docker-image buildplane/ai-service:dev --name buildplane
 kind load docker-image buildplane/operator:dev --name buildplane
 kind load docker-image buildplane/web:dev --name buildplane
 ```
 
-Install the local stack with Helm:
+Install BuildPlane:
 
 ```bash
 helm lint deploy/helm/buildplane
-helm template buildplane deploy/helm/buildplane \
-  --namespace buildplane-system \
-  --include-crds \
-  --values deploy/helm/buildplane/values-kind.yaml
 
 helm upgrade --install buildplane deploy/helm/buildplane \
   --namespace buildplane-system \
@@ -409,12 +416,8 @@ helm upgrade --install buildplane deploy/helm/buildplane \
   --timeout 10m
 ```
 
-The local kind profile enables a single-replica PostgreSQL StatefulSet inside
-Kubernetes and creates the synthetic `buildplane-postgres` Secret through Helm.
-You do not need Docker Compose for this path.
-
-If you previously installed resources manually with `kubectl apply`, reset the
-local namespace before switching to Helm so Helm can own the resources cleanly:
+If you previously installed raw manifests or manually created resources, reset
+the local namespace once before reinstalling with Helm:
 
 ```bash
 kubectl delete namespace buildplane-system
@@ -428,32 +431,34 @@ helm upgrade --install buildplane deploy/helm/buildplane \
   --timeout 10m
 ```
 
-Inspect:
+Verify the rollout:
 
 ```bash
 kubectl get pods -n buildplane-system
+kubectl get statefulset buildplane-postgres -n buildplane-system
+kubectl get secret buildplane-postgres -n buildplane-system
 kubectl get buildplaneruntime -n buildplane-system
-kubectl port-forward -n buildplane-system service/buildplane-control-plane 8080:80
 ```
 
-The lower-level `deploy/kind/*.yaml` manifests are kept as learning artifacts
-for understanding what Helm renders. If you want to apply them directly instead
-of using Helm, apply the local manifests:
+Open the API locally:
 
 ```bash
-kubectl apply -f deploy/kind/buildplane-config.yaml
-kubectl apply -f deploy/kind/buildplane-postgres.yaml
-kubectl rollout status statefulset/buildplane-postgres -n buildplane-system
-kubectl apply -f deploy/kind/buildplane-rbac.yaml
-kubectl apply -f deploy/kind/buildplane-redis.yaml
-kubectl apply -f deploy/kind/buildplane-control-plane.yaml
-kubectl apply -f deploy/kind/buildplane-ai-service.yaml
-kubectl apply -f deploy/kind/buildplane-scheduler-worker.yaml
-kubectl apply -f deploy/kind/buildplane-runtime-crd.yaml
-kubectl apply -f deploy/kind/buildplane-operator.yaml
-kubectl apply -f deploy/kind/buildplane-runtime-sample.yaml
-kubectl apply -f deploy/kind/buildplane-observability.yaml
+kubectl port-forward -n buildplane-system service/buildplane-control-plane 8080:80
+curl http://localhost:8080/readyz
+curl http://localhost:8080/version
 ```
+
+Common checks:
+
+```bash
+kubectl logs -n buildplane-system deployment/buildplane-control-plane
+kubectl logs -n buildplane-system deployment/buildplane-scheduler
+kubectl describe pod -n buildplane-system <pod-name>
+```
+
+Detailed local Kubernetes instructions:
+
+- [Local kind deployment guide](docs/deployment/local-kind.md)
 
 ## Kubernetes: Helm
 
