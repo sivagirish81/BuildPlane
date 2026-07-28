@@ -1,4 +1,11 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: buildplane-system
+  labels:
+    app.kubernetes.io/part-of: buildplane
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: buildplane-runtime-config
@@ -25,5 +32,7 @@ metadata:
     app.kubernetes.io/part-of: buildplane
 type: Opaque
 stringData:
+  username: buildplane
+  password: buildplane_dev_password
+  database: buildplane
   database-url: postgres://buildplane:buildplane_dev_password@buildplane-postgres:5432/buildplane?sslmode=disable
-

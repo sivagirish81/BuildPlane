@@ -1,0 +1,115 @@
+# Local kind PostgreSQL for BuildPlane development.
+#
+# This is intentionally a small single-replica StatefulSet so the local
+# Kubernetes path boots end to end. For production, use managed PostgreSQL
+# or a separately operated database with backups, restore drills, upgrades,
+# monitoring, and HA.
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildplane-postgres
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-postgres
+    app.kubernetes.io/part-of: buildplane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: buildplane-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: buildplane-postgres
+  namespace: buildplane-system
+  labels:
+    app.kubernetes.io/name: buildplane-postgres
+    app.kubernetes.io/part-of: buildplane
+spec:
+  serviceName: buildplane-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildplane-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildplane-postgres
+        app.kubernetes.io/part-of: buildplane
+    spec:
+      securityContext:
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: buildplane-postgres
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: buildplane-postgres
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: buildplane-postgres
+                  key: database
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: buildplane-postgres
+          app.kubernetes.io/part-of: buildplane
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
